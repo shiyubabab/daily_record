@@ -1,4 +1,5 @@
-Memory Hierarchy
+													Memory Hierarchy
+
 	Regs
 	L1 cache (SRAM)
 	L2 cache (SRAM)
@@ -25,7 +26,9 @@ L2 cache       10			256KB			8			64B			512
 L3 cache      4075			8MB			    16			64B			8192
 -------------------------------------------------------------------------
 
-Linking
+
+
+														Linking
 
 Pre-processor(cpp)->Compiler(ccl)->Assembler(as)->Linker(ld)
 
@@ -306,24 +309,24 @@ Relocation Entries
 --------------------------------------------
 
 
-----------------------------------------------
+-----------------------------------------------------------
 可执行程序				
-----------------------------------------------
+-----------------------------------------------------------
 ELF header				
 Segment haeader table	
 .init					
 .text				
 .rodata					Code Segment(代码段,加载进内存)
-----------------------------------------------
+-----------------------------------------------------------
 .data					
 .bss					Data Segment(数据段,加载进内存)
-----------------------------------------------
+-----------------------------------------------------------
 .symtab				
 .debug					
 .line				 
 .strtab					Symbol table
 Section header table    and debug info(不会加载进内存)
-----------------------------------------------
+-----------------------------------------------------------
 
 
 ----------------------------------------------
@@ -401,4 +404,23 @@ Building high-performance Web Server
 
 
 
-Exceptional Control Flow
+													Exceptional Control Flow
+
+------------------------------------------------------------------
+whay we need to learn exceptional control flow
+------------------------------------------------------------------
+help you understand important systens concepts. (进程 虚拟内存 IO)
+------------------------------------------------------------------
+how applications interact with the operating system.
+------------------------------------------------------------------
+write interesting new application programs
+------------------------------------------------------------------
+help you understand concurrency
+------------------------------------------------------------------
+understand how software exceptions work
+------------------------------------------------------------------
+
+
+
+
+
