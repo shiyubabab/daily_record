@@ -411,7 +411,7 @@ whay we need to learn exceptional control flow
 ------------------------------------------------------------------
 help you understand important systens concepts. (进程 虚拟内存 IO)
 ------------------------------------------------------------------
-how applications interact with the operating system.
+how applications interact with the operating system. (shell)
 ------------------------------------------------------------------
 write interesting new application programs
 ------------------------------------------------------------------
@@ -420,7 +420,295 @@ help you understand concurrency
 understand how software exceptions work
 ------------------------------------------------------------------
 
+				Application
+				  program
+				     |
+					 |		Exception
+	Event ------Icurr|------------------|
+   occurs								|Excption
+										|processing
+					 |Inext-------------|
+					 |		Exception
+					 |		  return
+					 |		(optional)
+					 |
+
+Exception Handing
+												Exception table
+										  |------------------------------|		
+										0 | Code for exception handler 0 |
+					Exception			1 | Code for exception handler 1 |
+					 number				2 | Code for exception handler 2 |
+						|		  |----	3 | Code for exception handler 3 |
+						|		  |						...
+Exception table ------- + --------|		n | Code for exception handler n |
+ base register  						  |------------------------------|		
+					 
+
+------------------------------------------------------------------------
+Exception vs Procedure Call
+------------------------------------------------------------------------
+Return current or next instruction
+函数调用将call的下一条指令压入stack中，也就是说函数返回执行的是下一条指令
+异常处理结束返回是可能执行当前或下一条指令
+------------------------------------------------------------------------
+Push additional processor state
+(处理器状态压入栈中)
+------------------------------------------------------------------------
+Control transfer from user program to kernel
+------------------------------------------------------------------------
+Run in kernel mode
+------------------------------------------------------------------------
+
+Handle Return
+.Returns control to the current instruction
+.Return control to the next instruction
+.Abort the interrupted program
+	(异常处理程序终止程序)
+
+						Classes of Exlceptions (中断 陷阱 故障 终止)
+---------------------------------------------------------------------------------------
+Class		Cause					Async/Sync(是否在cpu内部)		Return behavior
+---------------------------------------------------------------------------------------
+Interrupt	Signal from I/O device		  Async		Always returns to next instruction
+Trap		Intentional exception		   Sync		Always returns to next instruction
+Fault		Potentially recoverable error  Sync		Might return to current instruction
+Abort		Nonrecoverable error		   Sync		Never returns
+---------------------------------------------------------------------------------------
+
+中断和异常：中断由外部事件导致，异常由内部事件导致
+中断由女朋友导致，异常由拉肚子导致，不得不暂停游戏
+
+Traps 陷阱:有意的异常
+应用程序执行系统调用：syscall
+例如：应用程序需要调用声卡或其他硬件时
+
+Faults 故障：
+Case 1：当前cpu要访问一个数据，该数据不在内存里，在硬盘上。这个时候就会导致一个缺页故障。此时操作系统就去将缺的页调入到内存当中，再返回，此时返回执行的就会是current instruction
+Case 2:当要去写一个只读文件时就会导致保护故障，此时就不会返回current instruction而是直接abort，也称之为不可恢复的故障
+
+Aborts 终止：
+发生致命的硬件错误
 
 
+Exceptions in Linux/x86-64 Systems
+-----------------------------------------------------------------
+Exception number	Description					Exception class
+-----------------------------------------------------------------
+	0				Divide error				Fault
+					(除法错误) 除零会报成Floating exception
+	13				General protection fault	Fault
+					(读写保护故障)
+	14				Page fault					Fault
+					(缺页故障)
+	18				Machine check				Abort
+  32-255			OS-defined exceptions		Interrupt or trap
+-----------------------------------------------------------------
+
+Linux/x86-64 System Calls
+-------------------------------------------------
+Number		Name		Description
+-------------------------------------------------
+ 0			read		Read file
+ 1			write		Write file
+ 2			open		Open file
+ 3			close		Close file
+ 4			stat		Get info about file
+ 5			mmap		Map memory page to file
+ 6			brk			Reset the top of the heap
+ 7			dup2		Copy file descriptor
+-------------------------------------------------
 
 
+------------------------------------------
+int main(){
+	write(1,"hello, world",13);
+	_exit(0);
+}
+------------------------------------------
+main:
+	movq $1,%rax	write is system call 1
+	movq $1,%rdi
+	movq $String,%rsi
+	movq $len,%rdx
+	syscall
+
+	movq $60,%rax	_exit is systemcall 60
+	movq $0,%rdi
+	syscall
+------------------------------------------
+
+Processes
+program has exclusive use of processor
+逻辑控制流
+program has exclusive use of the memory system
+每一个进程所能看到的地址空间都是整个内存的地址空间
+|------------------------------|
+|		Kernel Memory		   |
+|------------------------------|2^48-1
+|		 User Stack			   |
+|	(created at run time)	   |
+|------------------------------|%rsp
+|							   |
+|							   |
+|------------------------------|
+|	Memory-mapped region	   |
+|	for shared libraries	   |
+|------------------------------|
+|							   |
+|							   |
+|------------------------------|brk
+|		Run-time heap		   |
+|	 (created by malloc)	   |
+|------------------------------|
+|	  Read/Write segment	   |
+|		(.data .bss)		   |
+|------------------------------|
+|	Read-only code segment	   |
+|	(.init .text .rodata)	   |
+|------------------------------|0x400000
+|							   |
+|------------------------------|0
+
+User and Kernel Modes
+
+			Control Register
+User mode	----------------	Kernel Mode
+
+Context
+general-purpose registers	floating-point registers
+progam counter	 user's stack	status register
+kernel's stack	 various kernel data structures
+
+Context Switch
+Saves the context of the current process (内核栈)
+Restores the saved context of some previously preempted process
+Passes control to this newly restored process
+
+Process
+	Running
+		SIGCOUN
+	Stopped
+		SIGSTOP	SIGTSTP	SIGTTIN	SIGTTOU
+	Terminated
+		Receiving a signal
+		Returning from the main routine
+		Calling the exit function
+
+ fork
+|-----------------------------------|
+|									|
+| linux>./hello						|
+| hello,world						|
+|									| Shell
+| linux>							| 父进程
+|									|
+|									|
+|-----------------------------------|
+
+-------------------------
+#include<sys/types.h>
+#include<unistd.h>
+
+pid_t fork(void);
+Call once, return twice
+	一次父进程
+	一次子进程
+-------------------------
+
+-----------------------------------------
+int main(){						
+	pid_t pid;
+	int x = 1;
+	pid = fork();
+
+	if(pid == 0){
+		printf("child:x=%d\n",++x);
+		exit(0);
+	}
+	printf("parent:x=%d\n",--x);
+	exit(0);
+}
+-----------------------------------------
+linux>./fork
+parent: x=0
+child: x=2
+-----------------------------------------
+
+Parent vs Child
+Call once return twice
+Concurrent execution
+Duplicate but separate address spaces
+(相同但是独立的地址空间)
+Shared files
+
+---------------------------------------------
+int main(){
+	fork();
+	fork();
+	prinrf("hello\n");
+	exit(0);
+}
+---------------------------------------------
+
+						hello
+				 |------------------------>
+				 |		printf			exit
+				 |
+				 |		hello
+		|--------------------------------->
+		|		fork 	printf			exit
+		|
+		|				hello
+		|		 |------------------------>
+		|		 |		printf			exit
+		|		 |		
+		|		 |		hello
+--------|--------|------------------------>
+main   fork		fork	printf			exit
+
+---------------------------------------------
+
+zombie(僵死进程) 该进程已经运行结束了等待回收所占用的资源。此时父进程通过waitpid函数来回收资源
+pid_t waitpid(pid_t pid,int *statusp,int options);
+	(1) pid > 0
+	(2) pid = -1 需要等待所有的子进程来回收
+	(3) *statusp : 描述子进程终止的原因
+		WIFEXITED(status) exit/return True
+		WIFSIGNALED(status)
+		WEXITSTATUS(status)
+		WIERMSIG(status)
+		WIFSTOPPED(status)
+
+execve
+#include<unistd.h>
+int execve(const char *filename,const char *argv[],const char *envp[]);
+Called once,Never return
+	(1) ./hello 文件名
+	(2) *argv[] 参数列表
+	(2) *envp[] 环境变量列表
+
+ fork
+|-----------------------------------|
+|									|
+| linux> ls -lt /home/csapp			|
+|									| Shell
+|									| 父进程
+|									|
+|									|
+|-----------------------------------|
+				   argv[]
+argv----------->|------------|
+				|   argv[0]  |------> "ls"
+				|   argv[1]  |------> "-lt"
+				|     ...    |
+				|argv[argc-1]|------> "/home/csapp"
+				|------------|
+
+				   envp[]
+envp----------->|------------|
+				|   envp[0]  |------> "PWD=/home/csapp"
+				|   envp[1]  |------> "..."
+				|     ...    |
+				|  envp[n-1] |------> "USER=shiyubabab"
+				|------------|
