@@ -1,0 +1,251 @@
+-----------------------------------------------------------------------------
+Operting systems need to play three roles:
+	Referree:since the applications share physical resources, the operating system needs to decide which applications get which resources and when.
+	Illusionist:operating systems provide the illusion of nearly infinite memory.they provide the illusion that each program has the computer's processors entirely to itself.
+	Glue:
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+The Process Abstraction:
+	What is a process and how does it differ from a program?
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Dual-Mode Operation:
+	What hardware enable the operating system to efficiently implement the process abstration?
+
+Using physically addressed base and bound registers can provide protection, but this does not provide some important features:
+G0.Expandable heap and stack;
+G1.Memory sharing;
+G2.Physical memory addresses;
+	Sinece a program may be loaded at different locations depending on what othe programs are running at the same time, the kernel must change every instruction and data locationg that refers to a global address, each time the program is loaded into memory.
+G3.Memory fragmentation.
+
+For these reasons, most modern processors introduce a level of indirection called virtual addresses.
+Virtual addresses can also let the heap and the stack start at separate ends of the virtual address space so they can grow according to program need.
+	the operating system can move it to different larger region in physical memory but leave it at the same virtual address.
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Types of Mode Transfer:
+	What causes the processor to switch control from a use-level program the kernel?
+
+User to Kernel Mode
+	There are three reasons for the kernel to take control from a user process:
+		Interrupts: occur asynchronously -- they are triggered by an external event. On a multiprocessor, an interrupt is taken on only one of the processors; the others continue to execute as if nothing happened.A processor can send an interrupt to any other processor.The kernel uses these interrupts to coordinate actions across the multiprocessor.
+		Processor exceptions (which is named fault in csapp): synchronous events -- On a multiprocessor,the exception only stops execution on the processor triggering the exception; the kernel then needs to send interprocessor interrupts to stop execution of parallel program on other processors.
+		System calls: synchronous events -- To protect the kernel from misbehaving user programs, it is essential that the hardware transfers control on a system call to a pre-defined address -- user processes cannot be allowed to jump to arbitrary places in the kernel.
+
+
+Case: to set a breakpoint in a program, the kernel replaces the machine instruction in memory with a special instruction that invokes a trap. When the program reaches that point in its exection, the hardware switches into kernel mode. The kernel restores the old instruction and transfers control to the debugger. The debugger can then examine the program's variables, set a new breakpoint, and resume the program at the instruction causing the exception.
+Case: Processor exceptions are a particularly powerful tool for virtualization
+
+Kernel to User Mode
+	New process.
+	Resume after an interrupt, processor exception, or system call. -- When the kernel finishes handling the request, it resumes execution of the interrupted process by restoring it program counter, restoring its registers, and changing the mode back to user level.
+	Switch to a different process.
+	User-level upcall.
+-----------------------------------------------------------------------------
+
+
+
+
+-----------------------------------------------------------------------------
+Implementing Safe Mode Transfer:
+	How do we safely switch between user level and the kernel?
+
+Interrupt Vector Table
+	the processor has a special register that points to an area of kernel memory called the interrupt vector table.
+	the  interrupt vector table is an array of pointers, with each entry pointing to the first instruction of a different handler procedure in the kernel.
+
+Interrupt Stack
+	You might think you could use the process's user-level stack to store its state. However, a separate, kernel-level interrupt stack is needed for two reasons.
+	Reliablility.The process's user-level stack pointer might not ba a valid memory address, but the kernel handler must continue to work properly.
+	Security.On a multiprocessor, other threads running in the same process can modify user memory during the system call. If the kernel handler stores its local variables on the user-level stack, the user program might be able to modify the kernel's return address, potentially causing the kernel to jump toarbitrary code.
+
+Case：On a multiprocessor, each processor needs to have its own interrupt stack so that, for example, the kernel can handle simultaneous system calls and exceptions across multiple processors. For each processor, the kernel allocates a separate region of memory as that processor's interrupt stack.
+
+Two Stacks per Process
+	Most operating system kernel go one step farther and allocate a kernel interupt stack for every user-level process.
+
+	If the process is running on the processor in user mode, its kernel stack is empty, ready to be used for an interrupt, processor exception, or system call.
+	If the process is running on the processor in kernel mode its kernel stack is in use, containing the saved registers from the suspended user-level computation as well as the current state of the kerel handler.
+	If the process is available to run but is waiting for its turn on the processor, its kernel stack contains the registers and state to be restored when the process is resumed.
+	If the process is waiting for an I/O event to complete, its kernel stack contains the suspended computation to be resumed when the I/O finishes.
+
+If the processor takes an interrupt in kernel mode with interrupts enabled, it is safe to use the current stack pointer rather than resetting it to the base of the interrupt stack. This approach can recursively push a series of handlers' states onto the stack.
+
+Case:Most modern processors with deep execution pipelines, such as the x86, instead provide precise interrupts: the hardware first completes all instructions that occur, in program order, before the interrupted instruction.
+-----------------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------------
+Putting It All Together: x86 Mode Transfer: What happens on an x86 mode switch?
+1. Mask interrupts.
+2. Save three key values.
+3. Switch onto the kernel interrupt stack.
+4. Push the three key values onto the new stack.
+5. Optionally save an error code. Certain types of exceptions, such as page faults, generate an error code to provide more information about the event;for these exceptions, the hardware pushes this code, making it the top item on the stack.
+6.Invoke the interrupt handler. Finally, the hardware changes the code segment/program counter to the address of the interrupt handler procedure.A special register in the processor contains the location of the interrupt vector table in kernel memory.
+
+The kernel's interrupt stack holds (1) the stack pointer, execution flags, and program count saved by the hardware,(2) an error code or dummy value, and (3) a copy of all of the general registers (including the stack pointer but not the instruction pointer or eflags register).
+-----------------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------------
+Implementing Secure System Calls. How do library code and the kernel work together to implement protected procedure calls from the application into the kernel?
+
+The sequence of steps involved in a system call:
+	1. The user program calls the user stub in the normal way, oblibious to the fact the implementation of the procedure is in fact in the kernel.	
+	2. The user stub fills in the code for the system call and executes the trap instruction.
+	3. The hardware transfers control to the kernel, vectoring to the system call handler.The handler acts as a stub on the kernel side, copying and checking arguments and then calling the kernel implementation of system call.
+	4. After the system call completes, it returns to the handler. 
+	5. The handler returns to user level at the next instruction in the stub.
+	6. The stub returns to the caller.
+
+int KernelStub_Open(){
+	char *locaTCopy[MaxFileNameSize + 1];
+	Check that the stack pointer is valid and that the arguments are s valid addrresses.
+	if (!validUserAddressRange(userStackPointer, userStackPointer + s))
+		return error_code;
+	Fetch pointer to file name from user stack and convert it to a kerner addresses.
+		filename = VirtualToKernel(userStackPointer);
+	Make a local copy of the filename. This prevents the application
+	from changing the name surreptitiously.
+	The string copy needs to check each address in the string before use
+	it is valid.
+	The string copy terminates after it copies MaxFileNameSize to ensure
+	do not overwrite our internal buffer.
+		if(!VirtualToKernelStringCopy(filename,localCopy,MaxFileNameSize))
+			return error_code;
+	Make sure the local copy of the file name is null terminated.
+		localCopy[MaxFileNameSize] = 0;
+	Check if the user is permitted to access this file.
+		if(!UserFileAccessPermitted(localCopy,current_process))
+			return error_code;
+	Finally, call the actual routine to open the file. This returns a
+	handle on success, or an error code on failure.
+		return Kernel_Open(localCopy);
+}
+
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Starting a New Process. How does the operating system kernel start a new process?
+The kernel must:
+	1. Allocate and initialize the process control block.
+	2. Allocate memory for the process.
+	3. Copy the program from disk into the newly allocated memory.
+	4. Allocate a user-level stack for handling system calls, interrupts and processor exceptions.
+
+To start running the program, the kernel must also:
+	1. Copy arguments into user memory.
+		Case: when you click on a file icon in MacOS or Windows, the window manager
+		asks the kernel to start the appliction associated with the file, passing it
+		the file name to open. The kernel copies the file name from the memory of the
+		window manager process to a special region of memory in the new process.
+	2. Transfer control to user mode.
+	   most operating system re-use same code to exit the kernel for starting a new process
+	   and for returning from a system call.
+	   Case: when we create the new process, we allocate a kernel stack to it, and we reserve
+	   room at the bottom of the kernel stack for the initial values of its use-space registers
+	   , program counter, stack pointer, and processor status word.To start the new program, we
+	   can then switch to the new stack and jump to the end of the interrupt handler. When the
+	   handle executes popad and iret, the processor "return" to the start of the user program.
+
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Implementing Upcalls. How does the operating system kernel deliver an asynchronous event to a user process?
+For many of the reasons that kernel need interrupt-based event delivery, applications can also
+benefit from being told when events occur that need their immediate attention.
+In UNIX, they are called signals; in Windows, they are asynchronous events.
+
+These are several uses for immediate event delivery with upcalls:
+	Preemptive user-level thrads.
+		A user-level thread package can use a periodic timer upcall as a trigger to
+		switch tasks, to share the processor more evenly among user-level tasks or 
+		to stop a runaway task.
+	Asynchronous I/O notification. 
+		a system call starts the request and returns immediately. Later, the appliction can
+		poll the kernel for I/O completion, or a separate notification can be sent via an 
+		upcall to the application when the I/O completes.
+	Interprocess communication.
+		A kernel upcall is needed if a process generates an event that needs the instant 
+		attention of another process.
+	User-level exception handling.
+		many applications have their own exception handling routines, e.g., to ensure that
+		files are saved before the application shuts down. For this, the operating system
+		needs to inform the application when it receives a processor exception so the 
+		appliction runtime, rather than the kernel, handles the event.
+	User-level resource allocation.
+		the operating system must inform the process when its allocation change, e.g.,
+		because some other process needs more or less memory.
+	
+UNIX signals share many similarities with hardware interrupts
+		Types of signals.
+			In place of hardware-defined interrupts and precessor exceptions, the kernel define
+			a limited number of signal types that a process can receive.
+		Handlers.
+			Each process defines its own handlers for each signal type, much as the kernel
+			defines its own interrupt vector table. If a process does not define a handler
+			for a specific signal, then the kerenl calls a default handler instead.
+		Signal Stack.
+			Applications have the option to run UNIX signal handlers on the process's normal 
+			execution stack or on a special signal stack allocated by the user process in 
+			user process in user memory.
+		Signal masking.
+			UNIX also provides a system call for applications to mask signals as needed.
+			UNIX defers signals for events that occur while the signal handler for those
+			types of events is in progress. Instead, the signal is delivered once the 
+			handler returns to the kernel.
+		Processor state. 
+			The kernel copies onto the signal stack the saved state of the program counter,
+			stack pointer, and general-purpose registers at the point when the program stopped.
+
+Case: on a timer interrupt, the hardware and the kernel handler save the state of the state of
+the user-level computation. To deliver the timer interrupt to user level, the kernle copies
+that saved state to the bottom of the signal stack, tesets the saved state to point to the 
+signal handler and signal stack, and then exits the kernel handler. When the signal handler
+returns, these steps are unwound: the processor state is copied back from the signal handler
+into kernel memory, and the iret returns to the original computation.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Case Study: Booting an OS Kernel. What steps are needed to start running an operating system kernel, to the point where it can create a process?
+When a computer boots, it sets the machine's program counter to start executing at a
+pre-determined position in memory.
+
+The BIOS reads a fixed-size block of bytes from a fixed position on disk into memory.
+This block of bytes is called the bootloader. Once the BIOS has copied the bootloader
+into memory, it jumps to the first instruction in the block.
+The bootloader in turn loads the kernel into memory and jumps to it.
+The kernel's executable image is stored in the file system.
+Thus, to find the bootloader, the BIOS needs to read a block of raw from disk;
+the bootloader, in turn, needs to know how to read from the file system to find and read 
+the operating system image.
+
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Case Study: Virtual Machines. Can an operating system run inside a process?
+
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+					The Programming Interface
+-----------------------------------------------------------------------------
+Process management.
+Input/output.
+Thread management.
+Memory management.
+File systems and storage.
+Networking and distributed systems.
+Graphics and window management.
+Authentication and security.
+-----------------------------------------------------------------------------

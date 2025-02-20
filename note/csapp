@@ -1,0 +1,505 @@
+-----------------------------------------------------------------------
+fork: 调用一次返回两次
+	G0.在父进程中，fork返回新创建子进程的进程ID;
+	G1.在子进程中，fork返回0;
+	G3.如果出现错误，fork返回一个负值.
+fork出错的两种原因：
+	1、当前进程数已经到达了系统规定的上限，这个时候errno值被设置为EAGAIN.
+	2、系统内存不足，这是errno的值被设置为ENOMEM.
+
+Call once,return twice.
+Concurrent execution.
+Duplicate but separate address spaces.
+Shared files.
+-----------------------------------------------------------------------
+execve:
+Delete existing user area.
+Map private area.	|code|data|bss|stack|heap|
+Maps shared area.	|libc.so这样的共享区域|
+Set the programmer count.
+
+| User Stack | Private, demand-zero
+| Memory-mapped region for shared libraries | Shared,file-backed
+| Run-time heap | Private, demand-zero
+| .bss | Private, demand-zero
+| .data | Private, file-backed	(ELF)
+| .text | Private, file-backed	(ELF)
+-----------------------------------------------------------------------
+
+Linux Signal
+
+-----------------------------------------------------------------------
+Sending Signals with the /bin/kill program	
+	linux> /bin/kill -9 15213
+	linux> /bin/kill -9 -15213 发送给15213进程组的所有进程一个-9的信号。
+-----------------------------------------------------------------------
+Sending Signals from the keyboard
+	linux> ls|sort
+			 	|			|-----|	pid = 10
+				|			|Shell|	pgid = 10
+				|			|-----|
+				|		  /    |	  \
+				|		/	   |	    \
+				|	  /		   |	      \
+				|----|		|----|pid=32   |----|pid=40
+		 pid=20 |前台|		|后台|pgid=32  |后台|pgid=40
+		pgid=20	|作业|		|作业|		   |作业|
+				|----|		|----|		   |----|
+				/	 \
+			   /	  \
+		 |------|	 |------|
+		 |子进程|	 |子进程|		when we use Ctrl + c ----> Sending Signals SIGINT to Process group (pgid=20) all process.
+		 |------|	 |------|
+		  pid=21	  pid=22
+		 pgid=20	 pgid=20
+-----------------------------------------------------------------------
+Sending Signals with the kill Function
+#include<sys/types.h>
+#include<signal.h>
+int kill(pid_t pid, int sig);
+Returns: 0 is OK, -1 on error
+-----------------------------------------------------------------------
+Sending Signals with the alarm Function
+#include<unistd.h>
+unsigned int alarm(unsigned int secs);
+它自己发送信号。设置闹钟定时去唤醒。
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Process Groups
+-----------------------------------------------------------------------
+父子进程属于同一个进程组(pgid)
+-----------------------------------------------------------------------
+#include<unistd.h>
+pid_t getpgrp(void);
+-----------------------------------------------------------------------
+#include<unistd.h>
+pid_t setpgrp(pid_t pid,pid_t pgid);
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Pending Signal(待处理信号)
+-----------------------------------------------------------------------
+					  SIGx
+源进程or内核 ------------------------>	目的进程
+										 Pending Signal
+										|--------------|
+										|	  SIGx	   |
+										|--------------|
+										 if(SIGx == 9){
+											 再来的SIGx
+											 直接丢弃
+										 }
+									  Blocked Signal(屏蔽)
+										|--------------|
+										|	  SIGx	   |
+										|--------------|
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Receiving Signals
+-----------------------------------------------------------------------
+The process terminates
+The process terminates and dumps core	-> .text and .data segments --move to--> Disk
+The process suspends until restarted by a SIGCONT signal
+The process ignores the signals
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+The Function
+-----------------------------------------------------------------------
+#include<signal.h>
+typedef void (*sighandler_t)(int);
+sighandler_t signal(int signum,sighander_t handler);
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Blocking and Unblocking Signals (因为block翻译为阻塞不好理解，这里翻译为屏蔽)
+-----------------------------------------------------------------------
+Implicit blocking mechanism
+(隐式的屏蔽机制)
+-----------------------------------------------------------------------
+Explicit blocking mechanism
+(显式的屏蔽机制)
+#include<signal.h>
+sigprocmask(int how,const sigset_t *set,sigset_t *oldset);
+
+sigset_t mask, prev_mask;
+sigemptyset(&mask);
+sigaddset(&mask,SIGINT);
+
+sigprocmask(SIG_BLOCK,&mask,&prev_mask);
+
+//Code region that will not be interrupted by SIGINT
+
+sigprocmask(SIG_SETMASK,&prev_mask,NULL);
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Safe Signal Handling
+-----------------------------------------------------------------------
+G0.Keep handlers as simple as possible
+-----------------------------------------------------------------------
+G1.Call only async-signal-safe functions in your handlers
+use write() and do not use printf,because printf could be interrupt.
+function write 只能访问局部变量
+-----------------------------------------------------------------------
+G2.Save and restore erron
+-----------------------------------------------------------------------
+G3.Protect accesses to shared global data structures by blocking all signals
+-----------------------------------------------------------------------
+G4.Declare global variable with volatile
+变量的值在内存中，多个进程或线程会去修改这个值，这个时候编译器会误以为
+这个变量在多个地方都会重复用到，就会将其存放在寄存器中，这就导致了错误
+的发生，volatile这个关键字就是拿来限定这个变量的读写访问内存。
+-----------------------------------------------------------------------
+G5.Declare flags with sig_atomic_t
+-----------------------------------------------------------------------
+
+SIGCHLD	---> 子进程已经终止，内核就会给父进程发送一个SIGCHLD的信号，让父进程去回收清理子进程的资源
+
+-----------------------------------------------------------------------
+信号处理函数
+-----------------------------------------------------------------------
+void handler(int sig){
+	int olderror = errno;
+
+	while((waitpid(-1,NULL,0))<0){
+		sio_puts("Handler reaped child\n");
+	}
+	if(errno != ECHILD)
+		sio_error("waitpid error");
+	sleep(1);
+
+	errno = olderrno;
+}
+
+int main(void){
+	int i , n;
+	char buf[MAXBUF];
+
+	if(signal(SIGCHLD , handler1)==SIG_ERR)
+		unix_error("signal error");
+	
+	for(i = 0;i < 3;i++){
+		if(fork() == 0){
+			printf("Hello from child %d\n",(int)getpid());
+			exit(0);
+		}
+	}
+	if((n = read(STDIN_FILENO,buf,sizef(buf)))<0)
+		unix_error("read");
+
+	printf("Parent processing input\n");
+	while(1)
+		;
+	exit(0);
+}
+-----------------------------------------------------------------------
+???????????????????????????????????????????????????????????????????????
+void handler(int sig){
+	int olderrno = errno;
+	sigset_t mask_all , prev_all;
+	pid_t pid;
+
+	sigfillset(&mask_all);
+	while((pid = waitpid(-1,NULL,0))>0){
+		sigprocmask(SIG_BLOCK,&mask_all,&prev_all);
+		deletejob(pid);
+		sigprocmask(SIG_SETMASK,&prev_all,NULL);
+	}
+	if(errno != ECHILD)
+		sio_error("waitpid error");
+	errno = olderrno;
+}
+
+int main(void){
+	int pid;
+	sigset_t mask_all, prev_all
+
+	sigfillset(&mask_all);
+	signal(SIGCHLD,handler);
+	initjobs();
+
+	while(1){
+		sigprocmask(SIG_BLOCK,&mask_one,&prev_one);
+		if((pid = fork())==0){
+			sigprocmask(SIG_SETMASK,&prev_one,NULL);
+			execve("/bin/data",argv,NULL);
+		}
+		sigprocmask(SIG_BLOCK,&mask_all,&prev_all);
+		addjob(pid);
+		sigprocmask(SIG_BLOCK,&mask_all,&prev_all);
+	}
+	exit(0);
+}
+
+					  				  kernel
+					  					|
+					  				 SIGCHLD
+					  					|
+					  |--- execve() ----|
+					  |					|
+					  |					|---- handle1 ----> delete job
+					  |				 
+					  |
+					  |
+----------------------|------------------------------------- after delete job -----------> sigprocmask | add job | sigprocmask
+					fork
+
+
+												    kernel
+													  |
+												   SIGCHLD
+													  |
+					  |--| sigprocmask - execve() ----|
+					  |								  |
+					  |								  |---- handle1 ----> delete job
+					  |				 
+					  |
+					  |
+---- sigprocmask |----|--------------> sigprocmask | add job | sigprocmask
+					fork
+
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Wait for a Signal with a Spin Loop
+-----------------------------------------------------------------------
+#include<signal.h>
+int sigsuspend(const sigset_t *mast)
+Returns : -1
+==
+sigprocmask(SIG_SETMASK,&mask,&prev)
+pasue()
+sigprocmask(SIG_SETMASK,&prev,NULL)
+==
+while(!pid)
+	Sigsuspend(&prev);
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+Nonlocal Jumps
+-----------------------------------------------------------------------
+#include<setjmp.h>
+int setjmp(jmp_buf env);
+int sigsetjmp(sigjmp_buf env,int savesigs);
+Returns: 0 from setjmp, nonzero from longjmps
+Save the current calling environment in the env buffer (pc,sp,... )
+Program counter, stack pointer, general-purpose registers
+-----------------------------------------------------------------------
+#include<setjmp.h>
+void longjmp(jmp_buf env,int retval);
+void siglongjmp(sigjmp_buf env,int retval);
+Nerver return
+1.Restores the calling environment from the env buffer
+2.Triggers a return form the most recent setjmp call
+3.setjmp returns with the nonzero return value retval
+-----------------------------------------------------------------------
+
+																Virtual Memory
+Virtual memory is central.
+Virtual memory is powerful.
+Virtual memory is dangerous.
+
+Page Table
+						Page Table								Physical memory
+					|----|-------------|						|-------------|	
+					|0	 |			   |						|	 VP1	  |	物理页号PPN
+					|----|-------------|						|-------------|
+					|1	 |			   |						|	 VP2	  |
+					|----|-------------|						|-------------|
+					|1	 |			   |						|	 VP7	  |
+					|----|-------------|						|-------------|
+					|1	 |			   |						|	 VP3	  |
+					|----|-------------|						|-------------|
+					|0	 |			   |
+					|----|-------------|
+					|0	 |			   |						Virtual memory	--->  Disk
+					|----|-------------|						|-----------|
+						in memory								|	 VP1	|
+																|-----------|
+																|	 VP2	|
+																|-----------|
+																|	 VP3	|
+																|-----------|
+																|	 VP4	|
+																|-----------|
+																|	 VP6	|
+																|-----------|
+																|	 VP7	|
+																|-----------|
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Address Translation
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+										 虚拟地址
+	页表基址				|---------------|-------------------|
+	 寄存器		 |----------| 虚拟页号(VPN) | 虚拟页偏移量(VPO) |
+		|		 |			|---------------|-------------------|
+		|		 |											|
+		|		 |		  有效位   物理页号(PPN)			|
+		|--------|--------> |--|------------|				|
+				 |			|  |			|				|
+				 |			|--|------------|				|
+				 |-------->	|1 |			|				|
+							|--|------------|	页表		|
+							|  |			|				|
+							|--|------------|				|
+							|  |			|				|
+							|--|------------|				|
+															|
+							|---------------|-------------------|
+							| 物理页号(VPN) | 物理页偏移量(PPO) |
+							|---------------|-------------------|
+										物理地址
+
+
+Translation Lookaside Buffer (TLB)
+
+		   虚拟地址
+|------|------|-------------------|
+| TLBT | TLBI | 虚拟页偏移量(VPO) |
+|------|------|-------------------|
+ 虚拟页号(VPN)
+ TLBT:TLB Tag	
+ TLBI:TLB Index
+
+ 组选择-->行匹配-->字抽取
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Virtual Memory Area	段
+
+struct {
+	struct mm_struct mm;
+
+}task_struct;
+
+struct{
+	pgd; 多级页表
+	struct vm_area_struct mmap;
+}mm_struct;
+
+struct{
+	vm_end;	该段的开始地址
+	vm_start;	该段的结束地址，常用于检查地址的访问是否越界等
+	vm_port;
+	vm_flags;
+	...
+	vm_next; 指向下一个段结构描述结构体
+}vm_area_struct;
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+真正将ELF的Code Segment 和 Data Segment 加载到内存中的是缺页处理程序
+其他Segment如何处理的：
+	堆栈段是由内核创建的匿名文件，全是二进制0 (demand-zero)
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+mmap
+#include<sys/mman.h>
+#include<unistd.h>
+void *mmap(void *start, size_t length,
+		   int prot, int flags,
+		   int fd, off_t offset)
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Dynamic Memory Allocation
+malloc -> Run-time heap -> brk point up
+
+#include<stdlib.h>
+void *malloc(size_t size);
+void free(void *ptr);
+
+#include<unistd.h>
+void *sbrk(intptr_t incr); 
+内核 brk+incr
+
+Goals:
+G0.Handling arbitrary request sequences.
+G1.Making immediate responses to requests.
+G2.Using only the heap.
+G3.Aligning blocks.
+G4.Not modifying allocated blocks.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Garbage Collector Basics
+Mark & Sweep Example
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+System-Level I/O
+
+Unix I/O
+	Opening files
+		| standard input | standard output | standard err |
+	Changing the current file
+	Reading and writing files
+	Closing files
+
+File
+	Regular file
+	Directory
+	Socket
+	named pipe
+	symbolic link
+	character and block device
+
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+int open(char *filename, int flags, mode_t mode);
+	O_RDONLY. Reading only
+	O_WRONLY. Writing only
+	O_RDWR.	Reading and Writing
+	O_CREAT.
+	O_TRUNC.
+	O_APPEND.
+Case: fd=open("foo.txt",O_RDONLY,0);
+fd = 0 stdin, fd = 1 stdout, fd = 2 stderr
+
+#include<unistd.h>
+ssize_t read(int fd, void *buf, size_t n);
+	Return - number of bytes read if OK
+			 0 on EOF (End of file) , -1 on error
+
+ssize_t write(int fd, const void *buf, size_t n);
+	Return - number of bytes written if OK
+			 -1 on error
+
+
+Robust I/O
+
+Sharing File
+every process have a Descriptor table
+	Descriptor table
+	fd0 | 0 |	stdin
+	fd1 | 1 |	stdout
+	fd2 | 2 |	stderr
+	fd3 |   |	
+	fd4 |   |	
+all process shared struct File
+	File A						v-node table(元数据)
+   |		|	----------->	|File access|
+   |File pos|					|File size	|
+   |refcnt=1|					|File type  |	function stat() could serach it.
+   | ...... |					| ......	|
+
+
+I/O Redirection
+linux > objdump -d ./a.out > a.s //"> is redirection, use function dup2()"
+#include<unistd.h>
+int dup2(int oldfb, int newfd);
+
+Unix I/O ---> open read write dup2
+Standard I/O ---> fopen fread fscanf ... fclose
+Robust I/O ---> rio_read rio_write
+
+G1.Use the standard I/O functions whenever possible.
+G2.Don't use scanf ro rio_readlineb to read binary files.
+G3.Use the RIO functions for I/O on network sockets.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
