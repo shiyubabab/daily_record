@@ -240,12 +240,52 @@ Case Study: Virtual Machines. Can an operating system run inside a process?
 -----------------------------------------------------------------------------
 					The Programming Interface
 -----------------------------------------------------------------------------
+
+What functions do we need an operating system to provide applictions?
+
 Process management.
+	Can a program create an instance of another program? Wait for it to complete?
+	Wait for it to complete?
+	Stop or resume another running program?
+	Send it an asynchronous event?
+	
 Input/output.
+	How do processes communicate with devices attached to the computer and through them
+	to the physical world?
+	Can processes communicate with each other?
+
 Thread management.
+	Can we create multiple activities or threads that share memory or other resources within a
+	process?
+	Can we stop and start threads?
+	How do we synchronize their use of shared data structures?
+
 Memory management.
+	Can a process ask for more (or less) memory space?
+	Can it share the same physical memory region with other processes?
+
 File systems and storage.
+	How does a process store the user's data persistently so that it can survive machine
+	crashes and disk failures?
+	How does the user name and organize their data?
+
 Networking and distributed systems.
+	How do processes communicate with processes on other computers?
+	How do processes on different computers coordinate their actions despite machine crashes
+	and network problems?
+
 Graphics and window management.
+	How does a process control pixels on its portion of the screen?
+	How does a process make use of graphics accelerators?
+
 Authentication and security.
+	What permissions does a user or a program have, and how are these permissions kept
+	up to date?
+	On what basis do we know the user is who they say they are?
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+3.1 Process Management. What is the system call interface for process management?
+
+
 -----------------------------------------------------------------------------
