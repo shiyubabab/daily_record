@@ -287,5 +287,104 @@ Authentication and security.
 -----------------------------------------------------------------------------
 3.1 Process Management. What is the system call interface for process management?
 
+One approach to process management is to just add a system call to create a 
+process, and other system calls for other proce operations.
 
+UNIX Process Management
+UNIX splits Create Process in two steps, called fork and exec.
+-----------------------------------------------------------------------------
+-----------------------------------------------------------------------------
+3.2 Input/Output
+
+All device I/O, file operations, and interporcess communication use the same set
+of system calls: open,close,read and write.
+
+Open before use. Before an application does I/O, it must first call open on the
+device, file, or communication channel. This gives the operating system a chance to 
+check access permissions and to set up any internal bookkeeping.
+
+Byte-oriented.All devices,even those that transfer fixed-size blocks of data,
+are accessed with byte arrays. Similarly, file and communication channel access is 
+in terms of bytes, even though we store data structures in file and send data structures
+acress channels.
+
+Kerenel-buffered reads. Stream data, such as from the network of keyboard, is stored in
+a kernel buffer and returned to the application on request. This allows the UNIX system
+call read interface to be the same for devices with streaming reads as those withe block
+reads.
+
+Kerenel-buffered writes. outgoing data is stored in a kernel buffer for transmission when
+the device becoms available.This decouples the application from the device, allowing each
+to go at its own speed.
+
+Explicit close. When an applicetion is done with the device or file, it calls close.
+This signals to the operationg system that it can decrement the reference-count on the device,
+and grabage collect any unused kernel data structures.
+
+For interporcess communication, we need a few more concepts:
+
+Pipes. A UNIX pipe is a kernel buffer with two file descriptors, one for writing
+(to put data into the pipe) and one for reading(to pull data out of the pipe). The pipe 
+terminates when either endpoint  closes the pipe or exits. The Intnet has a similar facility
+to UNIX pipes called TCP(Transmission Control Protocol).
+
+Replace file descriptor. By manipulating the file descriptors of the child process, the shell
+can cause the child to read its input from, or send its output to, a file or a pipe instead of 
+from a key board or to the screen. This way, the child process does not need to be aware of who
+is providing or consuming its I/O. The shell does this redirection using a special system call
+name dup2(from,to) that replaces the to file descriptor with a copy of the from file descriptor.
+
+Wait for multiple reads.Read will block if there is no data to be read, and it world be 
+inefficient for the server to poll each pipe in turn to check if there is work for it to do.
+The UNIX system call select(fd[],number) addresses this. Select allows the server to wait for
+input from any of a set of file descriptors; it returns the file descriptor that has data.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------	
+				Creating and managing processes
+-----------------------------------------------------------------------------
+fork()	Create a child process as a clone of the current process.
+		The for call returns to both the parent and child.
+
+exec(prog,args)	Run the application prog in the current process.
+
+exit()	Tell the kernel the current process is complete,and its data structures
+		should be garbage collected.
+
+wait(processID)	Pause until the child process has exited.
+
+signal(processID,type) Send an interrupt of a specified type to process.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------	
+					I/O operations
+-----------------------------------------------------------------------------
+fileDesc open(name) Open a file,channel, or hardware device, specified by name;
+					return a file descriptor that can be used by other calls.
+
+pipe(fileDesc[2]) between two processes. Pipe returns two file descriptors,
+				  one for reading and one for writing.
+
+dup2(fromFileDesc,toFileDesc) Replace the toFileDesc file descriptor with a copy of
+							  fromFileDesc. Used for replacing stdin or stdout or both
+							  in a child process before calling exec.
+
+int rad(fileDesc,buffer,size) Read up to size bytes into buffer, from the file, channel,
+							  or device. Read return the number of bytes actually read.
+							  For treaming devices this will often be less than size.
+							  For example, a read from the keyboard device will return 
+							  all of its queued bytes.
+
+int write(fileDesc,buffer,size) Analogous to read, write up to size bytes into kerenl
+								output buffer for a file, channel, or device. Write 
+								normally returns immediately but may stall if there is
+								no space in the kernel buffer.
+
+fileDesc select(fileDesc[],arraySize) Return when any of the file descriptors in the array
+									  fileDesc[] have data available to be read. Returns the
+									  file descriptor that has data pending.
+
+close(fileDescriptor) Tell the kernel the process is done with this file,channel,or device.
 -----------------------------------------------------------------------------
