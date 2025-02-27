@@ -388,3 +388,157 @@ fileDesc select(fileDesc[],arraySize) Return when any of the file descriptors in
 
 close(fileDescriptor) Tell the kernel the process is done with this file,channel,or device.
 -----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Case Study:Implementing a Shell
+
+The process that creates the shell is responsible for providing it an open file descriptor
+for reading commands for its input,called stdin and for writing outpu,called stdout.
+
+Because the commands to read and write to an open file descriptor are the same whether the file
+descriptor represents a keyboard,screen,file,device, or pipe, UNIX programs do not need to be
+aware of where their input is coming from, or where their output is going. This is helpful in a
+number of ways:
+
+A program can be a file of commands.Programs are normally a set of machine instructions, but 
+on UNIX a program can be a file containing a list of commands for a shell to interpret.
+shell programs signified in UNIX by putting "#! interpreter" as the first line of the file,
+where "interpreter" is the name of the shell executable.
+
+A program can send its output to a file. By changing the stdout file descriptor in the child,
+the shell can redirect the child's output to a file. After the fork and before the exec, the
+shell can replace the stdout file descriptor for the child using dup2. Because the parent has
+been cloned, changing stdout for the child has no effect on the parent.
+
+A program can read its input from a file. Likewise, by using dup2 to change the stdin file
+descriptor, the shell can cause the child to read its input from a file.
+
+The output of one program can be the input to another program. The shell can use a pipe to 
+connect two programs together, so that the output of one is the input of another. 
+e.g "cpp file.c | cpare | cgen | as > file.o"
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Case Study: Interprocess Communication
+Three widely used forms of interprocess communication are:
+	Producer-consumer:
+		Communication is one-way: the producer only writes, and the consumer only reads.
+		This allows chaining:a consumer can be, in turn , a producer for a different process.
+		Much of the sucess of UNIX was due to its ability to easily compose many different 
+		programs together in this fashion.
+	Client-server:
+		The server implements some specialized task,such as managing the printer queue or 
+		managing the display. Clients send requests to the server to do some task, and when
+		the operation is complete, the server replies back to the client.
+	File system:
+		Another way programs can be connected together is through reading and writing files.
+		A key distinction is that, unlike the first two modes, communication through the 
+		file system can be separated in time.Therefore, data needs to be stored persistently
+		on disk or other stable storage, and the data needs to be named so that you can find
+		the file when needed later on.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Producer-Consumer Communication
+As one process cmputers and produces a stream of output data, it issues a sequence of write
+system calls on the pipe into the kernel.Each write can be of variable size. Assuming there
+is room in the kernel buffer, the kernel copies the data into the buffer, and returns 
+immediately back to the producer.
+The kernel buffer allows each process to run at its own pace.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Client-Server Communication
+Instead of a single pipe, we create two,one for each direction. To make a request, the client
+writes the data into one pipe, and reads the response from the other. The server does the
+oppsite: it reads requests from the first pipe, performs whatever is requested, and writes the
+response onto the second pipe.
+
+Client:
+	char request[RequestSize];
+	char reply[ReplySize];
+
+	//..compute..
+
+	// put the request into the buffer.
+
+	// Send the buffer to the server.
+	write(output, request, RequestSize);
+
+	// Wait for response
+	read(input, reply, ReplySize);
+
+	// ..compute..
+
+Server:
+	char request[RequstSize];
+	char reply[ReplySize];
+
+	// Loop waiting for requests.
+	while(1){
+		// Read incoming command.
+		read(input, request, RequestSize);
+
+		// Do operation.
+
+		// Send result.
+		write(output,reply,ReplySize);
+	}
+Frequently, we want to allow many clients to talk to the same server.
+For this, the server uses the select system call to identify the pipe containing the request.
+Server:
+	char request[RequstSize];
+	char reply[ReplySize];
+	FileDescriptor clientInput[NumClients];
+	FileDescriptor clientOutput[NumClients];
+
+	// Loop waiting for requests.
+	while(fd = select(clientInput, NumClients)){
+		// Read incoming command.
+		read(clientInput[fd], request, RequestSize);
+
+		// Do operation.
+
+		// Send result.
+		write(clientoutput[fd],reply,ReplySize);
+	}
+
+How can we improve its performance?
+One step is to recognize that both the client and the server issue a write immediately followed
+by a read, to wait for the other side to reply; at the cost of adding a system call, these can
+be combined to eliminate two kernel crossings per round trip.
+Further, the client will always need to wait for the server, so it makes sense for it to donate
+its processor to run the server code, reducing delay.
+On a multicore system, it is possible or even likely that both the client and server each have
+their own processor.If the kernel sets up a shared memory region accessible to both the client 
+and the server and no other processes, then the client and server can pass requests and replies
+back and forth,as fast as the memory system will allow, without ever traversing into the kernel
+or relinquishing their processors.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+Operating System Structure
+
+Many parts of the operating system depend on synchronization primitives for coordinating
+access to shared data structures with the kernel.
+
+The virtual memory system depends on low-level hardware support for  address translation,
+support that is specific to a particular processor architecture.
+
+Both the file system and the virtual memory system share a common pool of blocks of 
+physical memory.They also both depend on the disk device driver.
+
+The file system can depend on the network protocol stack if the disk is physically located on
+a different machine.
+
+-----------------------------------------------------------------------------
+Two common themes emerge across systems:
+	to improve protability, almost all modern operating systems have both a
+	hardware abstraction layer and dynamically loaded device drivers.
+
+Hardware Abstraction Layer
+
+-----------------------------------------------------------------------------
