@@ -538,7 +538,18 @@ a different machine.
 Two common themes emerge across systems:
 	to improve protability, almost all modern operating systems have both a
 	hardware abstraction layer and dynamically loaded device drivers.
-
+-----------------------------------------------------------------------------
 Hardware Abstraction Layer
+Case: Windows has a two-pronged strategy for portability. To allow the same Windows kernel
+binary to be used across personal computers manufacture by different vendors, the kernel is
+dynamically linked at boot time with a set of library routines specifically written for each
+hardware configuration.This isolates the kernel from the specifics of the motherboard hardware.
+
+Windows also runs across a number of different processor architectures.Typically, a different
+kernel binary is produced for each type of processor,with any neeed processor-specific code;
+sometimes, conditional execution is used to allow a kernel binary to be shared across closely
+related processor designs.
+-----------------------------------------------------------------------------
+Dynamically Installed Device Drivers
 
 -----------------------------------------------------------------------------
