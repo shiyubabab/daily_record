@@ -552,4 +552,52 @@ related processor designs.
 -----------------------------------------------------------------------------
 Dynamically Installed Device Drivers
 
+The operating system boots with a small number of devices -- e.g.,for the disk (to read the 
+operating system binary into memory). For the devices physically attached to the computer, the
+computer manufacturer bundles those drivers into a file it stores along with the bootloader.
+When the operating system starts up, it queries the I/O bus for which devices are attached to
+the computer and then loads those drivers from the file on disk.
+
+While dynamically loadable device drivers solve one proble, they pose a different one.
+
+Operating system developers have taken five approaches to dealing with this issue:
+
+Code inspection.Operating system vendors typically require all device driver code to be
+submitted in advance for inspection and testing,before being allowed into the kernel.
+
+Bug tracking. After every system crash, the operating system can collect information about the
+system configuration and the current kernel stack,and sends this information back to a central
+database for analysis.
+
+User-level device drivers.Both Apple and Microsoft strongly encourage new device drivers to
+run at user-level rather than in the kernel.
+
+An alternative to the monolithic kernel approach is to run as much of the operating system as
+possible in one or more user-level servers. The window manager on most operating systems works
+this way: individual applications draw items on their portion of the screen by sending requests
+to the window manager. The window manager adjudicates which application window is in front or
+in back for each pixel on the screen,and then renders the result. If the system has hardware
+graphics accelerator present, the window manger can use it to render items more quickly.Some
+systems have moved other parts of the operating system into user-level servers:the network
+stack,the file system,device drivers,and so forth.
+
+The location of the service can be hidden in a user-level library -- calls go to the library,
+while casts the requests either as system calls or as reads and writes to the server through
+a pipe. 
+The location of the the server can also be hidden inside the kernel -- the application calls
+the kernel as if the kernel implements the service, but instead the kernel reformats the
+request into a pipe that the server can read.
+
+Most systems adopt a hybrid model where some operating system services are run at user-level
+and some are in the kernel, depending on the specific tradeoff between code complexity and
+performance.
+-----------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------
+Summary and Future Directions
+Operating systems use the system system call interface to provide services to applications and
+to aid in the internal structuring of the operating system itself. Almost all general-purpose
+computer systems today have a user-level shell and/or a window manager that can start and 
+manage applications on behalf of the user. Many systems also implement part of the operating
+system as user-level services accessed through kernel pipes.
 -----------------------------------------------------------------------------
