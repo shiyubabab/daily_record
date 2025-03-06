@@ -1,6 +1,74 @@
+4.Concurrency and Threads.	Many hands make light work.
+
 -----------------------------------------------------------------------------------------------
-Concurrency and Threads. 
-Many hands make light work.
+Thread Use Cases. What are threads useful for?
+In a program, we can represent each concurrent task as a thread. Each thread provides the 
+abstraction of sequential execution similar to the traditional programming model. In fact, we
+can think of a traditional program as single-threaded with one logical sequence of steps as
+each instruction follows the previous one. Each individual thread follows a single sequence of
+steps as it executes statements, iterates through loops, calls/returns from procedures.
+
+Four Reasons to Use Threads
+	Program structure: expressing logically concurrent tasks.
+	Responsiveness: shifting work to run in the background.
+					Case:when writing a file, the operating system stores the modified
+						 data in a kernel buffer, and returns immediately to the application.
+						 In the background, the operating system kernel runs a separate thread
+						 to flush the modified data out to disk.
+	Performance: exploiting multiple processors.
+				 An advantage to using threads for parallelism is that the number of threads
+				 need not exactly match the number of processors in the hardware on which it
+				 is runing. The operating system transparently switches which threads run on
+				 which processors.
+	Performance: managing I/O devices.
+-----------------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------------
+Thread Abstraction. What is the thread abstraction as seen by a programmer?
+
+A thread is a single execution sequence that represents a separately schedulable task.
+	a.Single execution sequence. Each thread executes a sequence of instructions just
+	as in the familiar sequential programming model.
+	b.Separately schedulable task. The operating system can run, suspend, or resume a thread at
+	any time.
+
+Running,Suspending,and Resuming Threads
 
 -----------------------------------------------------------------------------------------------
 
+-----------------------------------------------------------------------------------------------
+Simple Thread API. How can programmers use threads?
+-----------------------------------------------------------------------------------------------
+
+-----------------------------------------------------------------------------------------------
+Thread Data Structures. What data structures does the operating system use to manage threads?
+-----------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------
+Thread Life Cycle. What states does a thread go through between initialization and completion?
+-----------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------
+Implementing Kernel Threads. How do we implement the thread abstraction inside the operating
+system kernel?
+-----------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------
+Combining Kernel Threads and Single-Threaded User Processes. How do we extend the
+implementation of kernel threads to support simple-threaded processes?
+-----------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------
+Implementing Multi-threaded Processes. How do we implement the thread abstraction for 
+multi-threaded applications?
+-----------------------------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------------------------
+Alternative Abstractions. What other abstractions can we use to express and implement
+concurrency?
+-----------------------------------------------------------------------------------------------
