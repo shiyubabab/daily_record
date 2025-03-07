@@ -34,10 +34,36 @@ A thread is a single execution sequence that represents a separately schedulable
 
 Running,Suspending,and Resuming Threads
 
+Why "Unpredictable Speed"?
+	We must coordinate thread actions through explicit synchronization rather than by trying
+	to reason about their relative speed.
+
+Is a kernel interrupt handler a thread?
+No, an interrupt handler is not a thread. A kernel interrupt handler shares some resemblance
+to a thread: it is a single sequence of instructions that executes from beginning to end. 
+However, an interrupt handler is not independently schedulable: it is triggered by a hardware
+I/O event, rather than a decision by the thread scheduler in the kernel. Once started, the
+interrupt handler runs to completion, unless preempted by another interrupt.
 -----------------------------------------------------------------------------------------------
 
 -----------------------------------------------------------------------------------------------
 Simple Thread API. How can programmers use threads?
+
+void thread_create(thread,func,arg)
+	Create a new thread, storing information about it in thread. Concurrently with the calling
+	thread, thread executes the function func with the argument arg.
+
+void thread_yield()
+	The calling thread voluntarily gives up the processor to let some other thread(s) run. The
+	scheduler can resume running the calling thread whenever it chooses to do so.
+
+int thread_join(thread)
+	Wait for thread to finish if it has not already done so; then return the value passed to
+	thread_exit by that thread. Note that thread_join may be called only once for each thread.
+
+void thread_exit(ret)
+	Finish the current thread. Store the value ret in the current thread's data structure.
+	If another thread is already waiting in a call to thread_join, resume it.
 -----------------------------------------------------------------------------------------------
 
 -----------------------------------------------------------------------------------------------
