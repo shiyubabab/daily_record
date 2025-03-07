@@ -50,6 +50,7 @@ interrupt handler runs to completion, unless preempted by another interrupt.
 Simple Thread API. How can programmers use threads?
 
 void thread_create(thread,func,arg)
+void pthread_create(thread,NULL,func,(void *)arg)
 	Create a new thread, storing information about it in thread. Concurrently with the calling
 	thread, thread executes the function func with the argument arg.
 
@@ -58,16 +59,122 @@ void thread_yield()
 	scheduler can resume running the calling thread whenever it chooses to do so.
 
 int thread_join(thread)
+void pthread_join(thread,(void **)exitValue)
 	Wait for thread to finish if it has not already done so; then return the value passed to
 	thread_exit by that thread. Note that thread_join may be called only once for each thread.
 
 void thread_exit(ret)
 	Finish the current thread. Store the value ret in the current thread's data structure.
 	If another thread is already waiting in a call to thread_join, resume it.
+
+Creating and scheduling threads are separate operations. Although threads are usually scheduled
+in the order that they are created, there is no guarantee. Further, even if thread 2 started
+running before thread 5, it might be preempted before it reaches the printf call.
+
+Why must the "Thread returned" message from thread 2 print before the Thread returned message
+from thread 5?
+Since the threads run on virtual processors with unpredictable speeds, the order in which the
+threads finish is indeterminate. However, the main thread checks for thread completion in the
+order they were created. It calls thread_join for thread i+1 only after thread_join for thread
+i has return.
+
+In practice, the operating system will often create a thread to run blockzero in the
+background. The memory of an exiting process does not need to be cleared until the memory is
+needed -- that is, when the next process is created.
+To exploit this flexibility, the operating system can create a set of low priority threads to
+run blockzero. The kernel can then return immediately and resume running application code.
+Later on, when the memory is needed, the kernel can call thread_join. If the zero is complete
+by that point, the join will return immediately; otherwise, it will wait until the memory is
+safe to use.
 -----------------------------------------------------------------------------------------------
 
 -----------------------------------------------------------------------------------------------
-Thread Data Structures. What data structures does the operating system use to manage threads?
+Thread Data Structures and Life Cycle. 
+What data structures does the operating system use to manage threads?
+
+The operating system provides the illusion that each thread runs on its own virtual processor
+by transparently suspending and resuming threads. For the illusion to work, the operating
+system must precisely save and restore the state of a thread. However, because threads run
+either in a process or in the kernel, there is also shared state that is not saved or restored
+when switching the processor between threads.
+
+ Shared State		   Thread 1's
+					Per-Thread State
+ ------------		|---------------|
+|	 Code	 |		| Thread Control|
+ ------------		|  Block(TCB)   |
+					|---------------|
+					|	  Stack		|
+ ------------		|   Information	|
+|	Global	 |		|---------------|
+|  Varivbles |		|	  Saved		|
+ ------------		|	Registers	|
+					|---------------|
+ ------------		|	  Thread	|
+|	 Heap	 |		|    Metadata	|
+ ------------		|---------------|
+ 
+
+					|	  Stack 	|
+					|...............|
+					|...............|
+					|---------------|
+
+The thread control block stores the per-thread state:
+	The current state of the thread's computation(e.g.,saved proecessor registers and a 
+	pointer to the stack)
+	and metadata needed to manage the thread(e.g.,the thread's ID,scheduling prority,owner,and
+	resource consumption). 
+Shared state includes the program's code, global static varibles, and the heap.
+
+Per-Thread State and Thread Control Block(TCB)
+	For every thread the operating system creates,it creates one TCB.
+	The thread control block holds two types of per-thread information:
+		1.The state of the computation being performed by the thread.
+		2.Metadata about the thread that is used to manage the thread.
+
+Per-thread Computation State.
+	a pointer to the thread's stack and a copy of its processor registers.
+
+	Stack: A thread's stack is the same as the stack for a single-threaded computation -- it
+	stores information needed by the nested procedures the thread is currently running.
+	When a new thread is created, the operating system allocates it a new stack and
+	stores a pointer to that stack in the thread's TCB.
+
+	Copy of processor registers: A processor's registers include not only its general-purpose
+	registers for storing intermediate values for ongoing computations, but they also include
+	special-purpose registers, such as the instruction pointer and stack pointer.
+	In some systems, the general-purpose registers for a stopped thread are stored on the top
+	of the stack, and the TCB contains only a pointer to the stack.In other systems, the TCB
+	contains space for a copy of all processor registers.
+
+Per-thread Metadata.
+	The TCB also includes per-thread metadata -- information for managing the thread. For
+	example, each thread might have a thread ID, scheduling priority, and status (e.g,
+	whether the thread is waiting for an event or is ready to be placed onto a processor).
+
+Shared State
+	program code is shared by all threads in a process, although each thread may be executing
+	at a different place within that code. Additionally, statically allocated global variables
+	and dynamically allocated heap variables can store information that is accessible to all
+	threads.
+
+In addition to the per-thread state that corresponds to execution state in the single-threaded
+case,some systems include additional thread-local variables.These variables are similar to
+global variables in that their scope spans different procedures, but they differ in that each
+thread has its own copy of these variables.
+Errno. In a multi-threaded program,however,multiple threads can perform system calls
+concurrently.Rather than redefine the entire UNIX system call interface for a multi-threaded
+environment, errno is now a macro that maps to a thread-local variable containing the error
+code for that thread's most recent system call.
+Heap internals. for performance reasons heaps may internally subdivide their space int 
+per-thread regions.The advantage of subdividing the heap is that multiple threads can each
+allocate objects at the same time without interfering with one anoter.Further, by allocating
+objects used by the same thread from the same memory region, cache hit rates may improve.To
+implement these optimizations, each subdivision of the heap has thread-local variables that
+track what parts of the thread-local heap are in use, what parts are free,and so on.
+Then, the code that allocates new memory is written to use these thread-local data structures
+and only take memory from the shared heap if the local heap is empty.
 -----------------------------------------------------------------------------------------------
 
 
