@@ -180,12 +180,58 @@ and only take memory from the shared heap if the local heap is empty.
 
 -----------------------------------------------------------------------------------------------
 Thread Life Cycle. What states does a thread go through between initialization and completion?
+
+INIT：Thread creeation puts a thread into its INIT state and allocates and initializes 
+per-thread data structures. Once that is done, thread creation code puts the thread into the
+READY state by adding the thread to the ready list. In practice, the ready list is not in fact
+a "list"; the operating system typically uses a more sophisticated data structure to keep 
+track of runnable threads, such as a priority queue.
+
+READY: Its TCB is on the ready list, and the values of its registers are stored in its TCB. At
+any time, the scheduler can cause a thread to transition from READY to RUNNING by copying its
+register values from its TCB to a processor's registers.
+
+RUNNING: At this time, its register values are stored on the processor rathre than in the
+TCB.A RUNNING thread can transition to the READY state in two ways:
+	The scheduler can preempt a running thread and move it to the READY state by:
+		1.saving the thread's registers to its TCB
+		2.switching the processor to run the next thread on the ready list.
+	A running thread can voluntarily relinquish the processor and go from RUNNING to READY by 
+	calling yield (e.g.,thread_yield in the thread library).
+
+WAITING: A thread in the WAITING state is waiting for some event. Whereas the scheduler can
+move a thread in the READY state to the RUNNING state, a thread in the WAITING state cannot
+run until some action by another moves it from WAITING to READY.After creating its children
+threads, the main thread must wait for them complete, by calling thread_join once for each
+child.If the specific child thread is not yet done at the time of the join, the main thread
+goes from RUNNING to WAITING until the child thread exits.
+While a thread waits for an event, it cannot make progress; therefore, it is not useful to run
+it. Rather than continuing to run the thread or storing the TCB on the scheduler's ready list,
+the TCB is stored on the waiting list of some synchronization variable associated with the 
+event. When the required event occurs, the operating system moves the TCB from the
+synchronization variable's waiting list to the scheduler's ready list, transitioning the thread
+from WAITING to READY.
+
+FINISHED: A thread in the FINISHED state never runs again. For example, the thread_exit call
+lets a thread pass its exit value to its parent thread via thread_join.
+
+
+Case: Where is my TCB?
+A remarkably tricky implementation question is how to find the current thread's TCB. The thread
+library needs access to the current TCB for a number of resons, e.g.,to change its priority or
+to access thread-local variables.
+The stack pointer is always unique to each thread. The thread library can store a pointer to
+the thread TCB at the very bottom of the stack, underneath the procedure frames. (Some system
+take this one step farther,and put the entire TCB at the bottom of the stack.) As long as
+thread stacks are aligned to start at a fixed block boundary,the low order bits of the current
+stack pointer can be masked to locate the pointer to the current TCB.
 -----------------------------------------------------------------------------------------------
 
 
 -----------------------------------------------------------------------------------------------
 Implementing Kernel Threads. How do we implement the thread abstraction inside the operating
 system kernel?
+
 -----------------------------------------------------------------------------------------------
 
 
