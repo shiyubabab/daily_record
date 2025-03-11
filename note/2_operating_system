@@ -232,6 +232,91 @@ stack pointer can be masked to locate the pointer to the current TCB.
 Implementing Kernel Threads. How do we implement the thread abstraction inside the operating
 system kernel?
 
+Kernel threads. A kernel thread executes kernel code and modifies kernel data structures.
+
+Kernel threads and single-threaded processes. these processes can invoke system calls that run
+concurrently with kernel threads inside the kernel.
+
+Multi-threaded processes using kernel threads. Most operating systems provide a set of library
+routines and system calls to allow applications to use multiple threads within a single
+user-level process.
+
+User-level threads.
+
+Creating a Thread:
+	
+void thread_create(thread_t *thread, void (*func)(int), int arg){
+	TCB *tcb = new TCB();
+	thread->tcb = tcb;
+	tcb->stack_size = INITIAL_STACK_SIZE;
+	tcb->stack = new Stack(INITIAL_STACK_SIZE);
+
+	tcb->sp = tcb->stack + INITIAL_STACK_SIZE;
+	tcb->pc = stub;
+
+	*(tcb->sp) = arg;
+	tcb->sp--;
+	*(tcb->sp) = func;
+	tcb->sp--;
+
+	thread_dummySwitchFrame(tcb);
+
+	tcb->state = READY;
+	readyList.add(tcb);
+}
+
+void stub(void (*func)(int), int arg){
+	(*func) (arg);
+	thread_exit(0);
+}
+
+There are three steps to creating a thread:
+
+1.Allocate per-thread state. The first step in the thread constructor is to allocate space
+for the thread's per-thread state: the TCB and stack
+
+2.Initialize per-thread state. To initialize the TCB, the thread constructor sets the new
+thread's registers to what they need to be when the thread starts RUNNING. The constructor
+starts the thread in a dummy function,stub,which in turn calls func. We need this extra step
+in case the func procedure returns instead of calling thread_exit.
+To start at beginning of stub, the thread constructor sets up the stack as if stub was just
+called by normal code;
+In addition,we also push a dummy stack frame for thread_switch onto the stack.
+
+3.Put TCB on ready list. The last step in creating a thread is to set its state to READY and
+put the new TCB on the ready list, enabling the thread to be scheduled.
+
+Deleting a Thread
+When a thread calls thread_exit, there are two steps to deleting the thread:
+	Remove the thread from the ready list so that it will never run again.
+	Free the per-thread state allocated for the thread.
+
+If a thread removes itself from the ready list and frees its own per-thread state, then the
+program may break. For example, if a thread removes itself from the ready list but an interrupt
+occurs before the thread finishes de-allocating its state, there is a memory leak: that thread
+will never resume to de-allocate its state.
+There is a simple fix: a thread never deletes its own state. Instead, some other thread must
+do it. On exit, the thread transitions to the FINISHED state, moves its TCB from the ready list
+to a list of finished threads the scheduler should never run. The thread can then safely
+switch to the next thread on the ready list. Once the finished thread is no longer running, it
+is safe for some other thread to free the state of the thread.
+
+Thread Context Switch
+We need to answer several questions:
+	What triggers a context switch?
+	How does a voluntary context switch (e.g., a call to thread_yield) work?
+	How does an involuntary context switch differ from a voluntary one?
+	What thread should the scheduler choose to run next?
+
+What Triggers a Kernel Thread Context Switch?
+	A thread context switch can be triggered by either a voluntary call into the thread library
+	,or an involuntary interrupt or processor exception.
+		Voluntary. most thread libraries provide a thread_yield call that lets the currently
+		running thread voluntarily give up the processor to the next thread on the ready list.
+		Similarly, the thread_join and thread_exit calls suspend execution of the current
+		thread and start running a different one.
+		Involuntary. An interrupt or processor exception could invoke an interrupt handler.
+
 -----------------------------------------------------------------------------------------------
 
 
