@@ -311,12 +311,76 @@ We need to answer several questions:
 What Triggers a Kernel Thread Context Switch?
 	A thread context switch can be triggered by either a voluntary call into the thread library
 	,or an involuntary interrupt or processor exception.
+
 		Voluntary. most thread libraries provide a thread_yield call that lets the currently
 		running thread voluntarily give up the processor to the next thread on the ready list.
 		Similarly, the thread_join and thread_exit calls suspend execution of the current
 		thread and start running a different one.
+
 		Involuntary. An interrupt or processor exception could invoke an interrupt handler.
 
+When switching between two threads, we need to temporatily defer interrupts until the switch is
+complete to avoid confusion.
+A subtle inconsistency might arise. Suppose a low priority thread is about to voluntarily
+switch to a high priority thread. It pulls the high priority thread off the ready list, and
+at that precise moment, an interrupt occurs. Suppose the interrupt moves a medium priority
+thread from WAITING to READY. Since it appears that switches to the new thread. The high
+priority thread is in limbo!
+		
+Voluntary Kernel Thread Context Switch
+
+void thread_switch(oldThreadTCB, newThradTCB){
+	pushad;
+	oldThreadTCB->sp = %esp;
+	%esp = newThreadTCB->sp;
+	popad;
+	return;
+}
+void thread_yield(){
+	TCB *chosenTCB, *finishedTCB;
+
+	disableInterrupts();
+
+	chosenTCB = readyList.getNextThread();
+	if(chosenTCB ==NULL){
+		//Nothing else to run
+	}els{
+		runningThread->state = ready;
+		readyList.add(runningThread);
+		thread_switch(runningThread, chosenTCB);
+		runningThread->state = running;
+	}
+
+	while((finishedTCB = finishedList->getNextThread()) != NULL){
+		delete finishedTCB->stack;
+		delete finishedTCB;
+	}
+
+	enableInterrupts();
+}
+
+void thread_dummySwitchFrame(newThread){
+	*(tcb->sp) = stub;
+	tcb->sp--;
+	tcb->sp -= SizeOfPopad;
+}
+
+To create a new thread, thread_create must set up the stack of the new thread to be as if had
+suspended execution just before performing its first instruction.
+Then, if the newly created thread is the next thread to run, a thread can call thread_yield,
+switch to the newly create thread, switch to its stack pointer, pop the register values off
+the stack, and "return" to the new thread, even though it had never calledd switch in the 
+first place.
+
+Involuntary Kernel Thread Context Switch.
+In short, comparing a switch between kernel threads to what happents on a user-mode transfer:
+(1) there is no need to switch modes (and therefore no need to switch stacks)
+(2) the handler can resume any thread on the ready list rather than always resuming the thread
+	or process that was just suspended.
+
+To be compatible with x86 interrupt hardware, the software implementation of thread_switch
+would simulate the hardware case, saving the return instruction pointer and eflags register
+before calling pushad to save the general-purpose registers.
 -----------------------------------------------------------------------------------------------
 
 
