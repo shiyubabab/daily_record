@@ -380,19 +380,50 @@ In short, comparing a switch between kernel threads to what happents on a user-m
 
 To be compatible with x86 interrupt hardware, the software implementation of thread_switch
 would simulate the hardware case, saving the return instruction pointer and eflags register
-before calling pushad to save the general-purpose registers.
+before calling pushad to save the general-purpose registers.After switching to the new stack,
+it would call iret to resume the new thread, whether the new thread was suspended by a
+hardware event or a software call.
 -----------------------------------------------------------------------------------------------
 
 
 -----------------------------------------------------------------------------------------------
 Combining Kernel Threads and Single-Threaded User Processes. How do we extend the
 implementation of kernel threads to support simple-threaded processes?
+
+A system with both kernel threads and single-threaded user processes.
+The PCB has information about the process's address space; when a context switch occurs from
+one process to another, the operating system must change the virtual memory mappings as well
+as the register state.
+Since the PCB and TCB each represent one thread, the kernel's ready list can contain a mix
+of PCBs for processes and TCBs for kernel threads.When the scheduler chooses the next thread to
+run, it can pick either kind.A thread switch is nearly identical whether switching between
+kernels or switching between a process's thread and a kernel thread.
+We can resume a process in the kernel using thread_switch.
+
+Entering the handler. When an interrupt or exception occurs, if the processor detects that it 
+is already in kernel mode, it just pushes the instruction pointer and eflags registers (but 
+not the stack pointer) onto the existing stack. On the other hand, if the hardware detects that
+it is switching from user-mode to kernel-mode, then the processor also changes the stack
+pointer to the base of the interrupt stack and pushes the original stack pointer along with
+the instruction pointer and eflags registers onto the new stack.
+
+Returning from the handler. When the iret instruction is called, it inspects both the current
+eflags register and the value on the stack that it will use to restore the earlier eflags
+register. If the mode bit is identical, then iret just pops the instruction pointer and 
+eflags register and continues to use the current stack. On the other hand, if the mode bit
+differs, then the iret instruction pops not only the instruction pointer and eflags register,
+but also the saved stack pointer, thus switching the processor's stack pointer to the saved
+one.
 -----------------------------------------------------------------------------------------------
 
 
 -----------------------------------------------------------------------------------------------
 Implementing Multi-threaded Processes. How do we implement the thread abstraction for 
 multi-threaded applications?
+
+Implementing Multi-Threaded Processes Using Kernel Threads.
+The simplest way to support multiple threads per process is to use the kernel thread
+implementation we have already described.
 -----------------------------------------------------------------------------------------------
 
 
