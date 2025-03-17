@@ -478,9 +478,48 @@ Various system take more of a hybrid model, attempting to combine the lightweigh
 and application control over scheduling found in user-level threads, while keeping many of the
 advantages of kernel threads.
 Hybrid Thread join.
-	
+	Thread libraries can avoid transitioning to the kernel in certain cases.
+	Rather than always making a system call for thread_join to wait for target thread to finish
+	, thread_exit can store its exit value in a data structure in the process's address space.
+	Then,if the call to thread_join happens after the targeted thread has exited, it can
+	immediately return the value without having to make a system call. However, if the call to
+	thread_join precedes the call to thread_exit, then a system call is needed to transition to
+	the WAITING state and let some other thread run.
 Per-Processor Kernel Threads.
+	It is possible to adapt the green threads approach to work on a multiprocessor. For many
+	parallel scientific applications, the cost of creating and synchronizing threads is 
+	paramount,and so an approach that requires a kernel call for most thread operations
+	would be prohibitive.Instead,the library multiplexes user-level threads on top of kernel
+	threads,in exactly the same way that the kernel multiplexes kernel threads on top of 
+	physical processors.
+	When the application starts up,the user-level thread library creates one kernel thread
+	for each processor on the host machine.As long as there is no other activity on the system,
+	the kernel will assign each of these threads a processor. Each kernel thread executes the
+	user-level scheduler in parallel:pull the next thread off the user-level ready list,and 
+	run it. Because thread scheduling decisions occur at user level, they can be flexible 
+	and application-specific; for example, in a parallel graph algorithm, the programmer might
+	adjust the priority of various threads based on the results of the computation on other
+	part of the graph.
+	most of the downsides of green threads are still present in these systems:
+		Any time a user-level thread calls into the kernel, its host kernel thread blocks.
+		This prevents the thread library from running a different user-level thread on that
+		processor in the meantime.
+		Any time the kernel time-slices a kernel thread, the user-level thread it was running
+		is also suspended. The library cannot resume that thread until the kernel thread 
+		resumes.
 Scheduler Activations.
+	In this approach, the user-level thread scheduler is notified for every kernel event that
+	might affect the user-level thread system.For example, if one thread blocks in a system
+	call, the activateion informs the user-level scheduler that it should choose anothe thread
+	to run on that processor. Scheduler activations are like upcalls or signals,except that
+	they do not return to the kernel; instead, they directly perform user-level thread suspend
+	and resume.
+	Various operations trigger a scheduler activation upcall:
+		1.Increasing the number of virtual processors.
+		2.Dereasing the number of virtual processors.
+		3.Transition to WAITING.
+		4.Transition from WAITING to READY.
+		5.Transition from RUNNING to idle.
 -----------------------------------------------------------------------------------------------
 
 
