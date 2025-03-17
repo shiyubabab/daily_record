@@ -424,7 +424,65 @@ multi-threaded applications?
 Implementing Multi-Threaded Processes Using Kernel Threads.
 The simplest way to support multiple threads per process is to use the kernel thread
 implementation we have already described.
+
+When a user-level thread accesses the thread library to do the same things, it uses a system
+call to ask the kernel to do the operation on its behalf.
+A thread in a process has:
+	A user-level stack for executing user code.
+	A kernel interrupt stack for when this thread makes system calls,causes a processor
+	exception, or is interrupted.
+	A kernel TCB for saving and restoring the per-thread state.
+To create a thread, the user library allocates a user-level stack for the thread and then does
+a system call into the kernel. The kernel allocates a TCB and interrupt stack, and arranges
+the state of the thread to start execution on the user-level stack at the beginning of the
+requested procedure.
+After creating the thread, the krenel puts the new thread on the ready list, to be scheduled
+like any other thread, and returns unique identifier for the user program to use when referring
+to the newly created thread(e.g.,for join).
+Thread join,yield,and exit work the same way: by calling into the kernel to perform the
+requested function.
+
+Implementing User-Level Threads Without Kernel Support
+It is also possible to implement threads as a library completely at user level, without any
+operating system support. JVM implemented what were called green threads, a pure user-level
+implementation of threads.
+The basic idea is simple. The thread library instantiates all of its data structures within
+the process: TCBs, the ready list, the finished list, and the waiting lists all are just data
+structures in the process's address space. Then, calls to the thread library are just procedure
+calls, akin to how the same functions are implemented within a multi-threaded kernel.
+To the operating system kernel, a multi-threaded application using green threads appears to be
+a normal, single-threaded process. The process as a whole can make system calls, be time-sliced
+,etc, Unlike with kernel threads, when a process using green threads is time-sliced, the entire
+process,including all of its threads, is suspended.
+A limitation of green threads is that the operating system kernel is unaware of the state of 
+the user-level ready list. If the application performs a system call that blocks watiting for
+I/O, the kernel is unable to run a different user-level thread.Likewise, on a multiprocessor,
+the kernel is unable to run the different threads running within a single process on different
+processors.
+To implement preemptive multi-threading for some process P:
+G1. The user-level thread library makes a system call to register a timer signal handler and
+signal stack with the kernel.
+G2. When a hardware timer interrupt occurs, the hardware saves P's register state and runs the
+kernel's handler.
+G3. Instead of restoring P's register state and resuming P where it was interrupted, the
+kernel's handler copies P's saved registers onto P's signal stack.
+G4. The kernel resumes execution in P at the registered signal handler on the signal stack.
+G5. The signal handler copies the processor state of the preempted user-level thread from the
+signal stack to that thread's TCB.
+G6. The signal handler chooses the next thread to run, re-enables the signal handler(the 
+equivalent of re-enabling interrupts), and restores the new thread's state from its TCB into
+the processor. execution with the state(newly) stored on the signal stack.
+
+Implementing User-Level Threads With Kernel Support
+Various system take more of a hybrid model, attempting to combine the lightweight performance
+and application control over scheduling found in user-level threads, while keeping many of the
+advantages of kernel threads.
+Hybrid Thread join.
+	
+Per-Processor Kernel Threads.
+Scheduler Activations.
 -----------------------------------------------------------------------------------------------
+
 
 
 -----------------------------------------------------------------------------------------------
