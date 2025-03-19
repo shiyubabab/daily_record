@@ -516,10 +516,28 @@ Scheduler Activations.
 	and resume.
 	Various operations trigger a scheduler activation upcall:
 		1.Increasing the number of virtual processors.
+			When a program starts, it receives an activation to inform the program that it
+			has been assigned a virtual processor:that activation runs the main thread and
+			any other threads that might be created.To assign another virtual processor to
+			the program, the kernel makes another activation upcall on the new processor;
+			the user-level scheduler can pull a waiting therad off the ready list and run
+			it.
 		2.Dereasing the number of virtual processors.
+			When the kernel preempts a virtual processor (e.g.,to give the processor to a
+			different process), the kernel makes an upcall on one of the other processors
+			assigned to the parallel program. The thread system can then move the preempted
+			user-level thread onto the ready list, so that a different processor can run it.
 		3.Transition to WAITING.
+			When a user-level thread blocks in the krenel waiting for I/O, the kernel similarly
+			makes an upcall to notify the user-level scheduler that it needs to take action,e.g.,
+			to choose another thread to run while waiting for the I/O to complete.
 		4.Transition from WAITING to READY.
+			When the I/O completes, the kernel makes an upcall to notify the scheduler that the
+			suspended thread can be resumed.
 		5.Transition from RUNNING to idle.
+			When a user-level activation finds an empty ready list (i.e., it has no more work 
+			to do), it can make a system call into the kernel to return the virtual processor
+			for use by some other process.
 -----------------------------------------------------------------------------------------------
 
 
@@ -527,4 +545,19 @@ Scheduler Activations.
 -----------------------------------------------------------------------------------------------
 Alternative Abstractions. What other abstractions can we use to express and implement
 concurrency?
+
+Asynchronous I/O and event-driven programming. Asynchronous I/O and events allow a 
+single-threaded program to cope with high-latency I/O devices by overlapping I/O with
+processing and other I/O.
+Asynchronous I/O is a way to allow a single-threaded process to issue multiple concurrent
+I/O requests at the same time.The process makes a system call to issue an I/O request but
+the call returns immediately, without waiting for the result.At a later time, the operating
+system provides the result to the process by either:
+	(1) calling a signal handler
+	(2) placing the result in a queue in the process's memory
+	(3) storing the result in kernel memory until the process makes another system call to 
+		retrieve it.
+
+Data parallel programming. With data parallel programming, all processors perform the same 
+instructions in parallel on different parts of a data set.
 -----------------------------------------------------------------------------------------------
