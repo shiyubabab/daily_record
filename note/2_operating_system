@@ -557,6 +557,72 @@ system provides the result to the process by either:
 	(2) placing the result in a queue in the process's memory
 	(3) storing the result in kernel memory until the process makes another system call to 
 		retrieve it.
+The server does a select call that blocks until any of the 10 network connections has data
+available to read. When the select call returns, it provides a list of connection with 
+available to read. The thread can then read from those connections, knowing that the read 
+will always return immediately. After processing the data, the thread then calls select 
+again to wait for the next data to arrive.
+Asynchronous I/O allows progress by many concurrent operating system requests. This 
+approach gives rise to an event-driven programming pattern where a thread spins in a loop;
+each iteration gets and processes the next I/O event.To process each event, the thread
+typically maintains for each task a continuation,a data structure that keeps track of a task's
+current state and next step. For example, handling a web request can involve a series of I/O
+steps:
+	(a) make a network connection
+	(b) read a request from the network connection
+	(c) read the requested data from disk
+	(d) write the requested data to the network connection.
+If a single thread is handling requests from multiple different clients at once,it must keep
+track of where it is in that sequence for each client.
+
+Event-Driven Programming vs. Threads
+The differences are:
+(1) whether the state is stored in a continuation or TCB
+(2) whether the state save/restore is done explicitly by the application or automatically by
+	the thread system.
+-----------------------------------------------------------------------------------------------
+// Event-driven
+Hashtable<Buffer*> *hash;
+while(1){
+	connection = use select() to find a readable connection ID
+	buffer = hash.remove(connection);
+	got = read(connection, tmpBuf, TMP_SIZE);
+	buffer -> append(tmpBuf, got);
+	buffer = hash.put(connection, buffer);
+}
+
+// Thread-per-client
+Buffer *b;
+while(1){
+	got = read(connection, tmpBuf, TMP_SIZE);
+	buffer->apend(tmpBuf,got);
+}
+
+With events, the code uses select to determine which connection's packet to retrieve next.
+With threads, the kernel transparently schedules each thread when data has arrived for it.
+The state in both cases is also similar. In the event-driven case, the application maintains
+a hash table containing the buffer state for each client.
+The server must do a lookup to find the buffer each time a packet arrives for a particular
+client.
+In the thread-per-client case, each thread has just one buffer, and the operating system keeps
+track of the different threads's states.
+-----------------------------------------------------------------------------------------------
+Performance: Coping with high-latency I/O devices.
+The common wisdom has been that the event-driven approach was significantly faster for two 
+reasons.
+First, the space and context switch overheads of this approach could be lower because a thread
+system must use generic code that allocates a stack for each thread's state and that saves
+and restores all registers on each context switch, while the event-driven approach lets
+programmers allocate and save/restore just the state needed for each task.
+Second, some past operating systems had inefficient or unscalable implementations of their
+thread systems, making it important not to create too many threads for each process.
+
+Performance: Exploiting multiple processors.
+
+
+
+
+
 
 Data parallel programming. With data parallel programming, all processors perform the same 
 instructions in parallel on different parts of a data set.
