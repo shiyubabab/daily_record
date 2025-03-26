@@ -17,9 +17,9 @@ typedef struct sbuf{
 	int rear;
 	int front;
 
-	sem_t mutex;
-	sem_t slots;
-	sem_t items;
+	sem_t mutex; /* the lock of box */
+	sem_t slots; /* the lock of set */
+	sem_t items; /* the items */
 }sbuf_t;
 
 void sbuf_init(sbuf_t *sp,int n){
@@ -28,9 +28,9 @@ void sbuf_init(sbuf_t *sp,int n){
 	sp->rear  = 0;
 	sp->front = 0;
 
-	sem_init(&sp->mutex,0,1);
-	sem_init(&sp->slots,0,n);
-	sem_init(&sp->items,0,0);
+	sem_init(&sp->mutex,0,1);	/* sem_init init semaphore,first postion is the lock */
+	sem_init(&sp->slots,0,n);	/* The second parameter refers to the one that is passed within thread or process */
+	sem_init(&sp->items,0,0);	/* The last is the number of semaphore */
 
 }
 
@@ -39,12 +39,12 @@ void sbuf_deinit(sbuf_t *sp){
 }
 
 void sbuf_insert(sbuf_t *sp,int item){
-	sem_wait(&sp->slots);
+	sem_wait(&sp->slots);	/* waitint to the semaphore */
 	sem_wait(&sp->mutex);
 
 	sp->buf[(++sp->rear)%(sp->n)] = item;
 
-	sem_post(&sp->mutex);
+	sem_post(&sp->mutex);	/* release the semaphore */
 	sem_post(&sp->items);
 
 }

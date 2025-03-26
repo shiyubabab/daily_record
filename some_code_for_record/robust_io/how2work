@@ -1,0 +1,14 @@
+IO
+	IO本质: Input/Output is the process of copying data between main memory and
+			external device such as disk drives,terminals,and networks.	
+			Main Memory
+			External Disk
+			File: array of bytes char[]
+	IO分类:
+			UNIX IO
+			Standard IO
+	Robust IO:
+			buffered
+			unbuffered
+			CMU
+	Shared Files

@@ -1,0 +1,15 @@
+All network applications are based on the same basic programming model, have similar overall
+logical structures,and rely on the same programming interface.
+
+Host Host Host			Host Host Host
+  \	   |    /			 \	   |    /
+	  Hub -------Bridge-------Hub	
+					|
+					|					Router
+					|		
+					|
+				Bridge
+				......
+
+
+Each Port Number is a Service!!!
