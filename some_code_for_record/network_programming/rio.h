@@ -24,6 +24,6 @@ typedef struct{
 }rio_t;
 
 void rio_readinitb(rio_t *rp, int fd);
-ssize_t rio_read(rio_t *rp,cahr *usrbuf,size_t n);
+ssize_t rio_read(rio_t *rp,char *usrbuf,size_t n);
 
 #endif

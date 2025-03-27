@@ -13,3 +13,34 @@ Host Host Host			Host Host Host
 
 
 Each Port Number is a Service!!!
+
+Socket Function
+	int getaddrinfo(const char *node,const char *service,
+					const struct addrinfo *hints,	// socket IPv4 IPv6
+					struct addrinfo **res);
+	将主机名和服务器名转换成套接字地址结构
+
+
+	int getnameinfo(const struct sockaddr *addr, socklen_t addrlen,
+					char *host,socklen_t hostlen,
+					char *serv,socklen_t servlen, int flags);
+	将套接字地址结构转换成主机名和服务器名转
+
+
+
+
+	Client									Server
+-----------------					   -----------------
+  getaddrinfo							  getaddrinfo
+-----------------					   -----------------
+	Socket									Socket	
+-----------------					   -----------------
+											bind
+										   listen
+ connect(block)-------------------------accept(block)<------|	
+-----------------					   -----------------  iteratively
+  transaction----------------------------transaction--------|
+-----------------					   -----------------
+	close
+-----------------					   -----------------
+

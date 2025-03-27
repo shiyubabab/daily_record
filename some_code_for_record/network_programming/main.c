@@ -7,15 +7,33 @@
 
 #include<stdio.h>
 #include<stdlib.h>
+#include<sys/socket.h>
+#include<netdb.h>
 #include"rio.h"
+#define MAXLINE 1024
+
+void unix_error(char *msg){
+	fprintf(stderr,"%s : %s\n",msg,strerror(errno));
+	exit(0);
+}
 
 int main(int argc,char **argv){
-	printf("argc : [%d]\n",argc);
-	printf("argv[0] : [%s]\n",argv[0]);
-	printf("argv[1] : [%s]\n",argv[1]);
-	printf("argv[2] : [%s]\n",argv[2]);
+	if(argc != 2){
+		unix_error("fomat ./myhostinfo www.website.com");
+	}
+	struct addrinfo hints;
+	struct addrinfo *res,*cur;
+	memset(&hints,0,sizeof(hints));
+	hints.ai_family   = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	getaddrinfo(argv[1],NULL,&hints,&res);
 
-
-	return 0;
+	char hostName[MAXLINE];
+	for(cur = res; cur != NULL ; cur = cur->ai_next){
+		getnameinfo(cur->ai_addr,cur->ai_addrlen,hostName,sizeof(hostName),NULL,0,NI_NUMERICHOST);
+		printf("canon-name : %s , host name : %s\n",cur->ai_canonname,hostName);
+	}
+	freeaddrinfo(res);
+	exit(0);
 }
 
