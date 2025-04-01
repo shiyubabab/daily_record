@@ -1,0 +1,56 @@
+并发三种方式：
+	Process:
+		tech:
+			fork
+			exec
+			waitpid
+		notice:
+			防止资源泄漏
+		feature:
+			separate space address
+			hard to share data
+			kerenel schedule
+	I/O Multiplexing:
+		tech:
+			select
+			poll
+			epoll
+		feature:
+			coding complexity
+			single locial flow,easy to debug
+	thread:
+		feature:
+			kernel schedule
+			own logical flow
+			less overhead for context switch
+
+
+
+
+
+在操作系统中，I/O多路复用是一种允许程序同时监视多个文件描述符(file descriptor)的技术，
+以确定它们中的任何一个是否准备好进行I/O操作。这使得程序可以在单个线程中高效地处理多个
+I/O事件，而无需为每个I/O事件创建一个单独的线程或进程。
+在Linux中，常用的I/O多路复用技术包括：
+	select：
+		select是一种早期的I/O多路复用技术
+		它允许程序监视一组文件描述符，以确定它们中的任何一个是否准备好进行读、写或异常
+		操作。
+		select的缺点是，它监视的文件描述符数量有限制，而且每次调用都需要遍历整个文件描
+		述符集合。
+	poll:
+		poll类似于select，但它克服了select的一些限制
+		poll允许程序监视大量文件描述符，并且不需要每次调用都遍历整个文件描述符集合。
+	epoll：
+		epoll是一种更高效的I/O多路复用技术，专为Linux设计。
+		epoll使用事件驱动的方法，只在文件描述符状态发生变化时通知程序，从而避免了不必要
+		的论询。
+		epoll具有很高的性能，并且可以处理大量并发连接，因此被广泛用于高并发的网络应用程
+		序。
+一个典型的I/O多路复用应用场景是web服务器。web服务器需要同时处理来自多个客户端的连接。使
+用I/O多路复用，web服务器可以使用单个线程来监视所有客户端连接，并在任何连接准备好进行I/O
+操作时进行处理。
+例如，当一个客户端发送请求时，web服务器会收到一个I/O事件，并读取请求的内容。然后，web服
+务器会处理请求，并将响应发送回客户端。
+通过使用I/O多路复用，web服务器可以高效地处理大量并发客户端连接，而无需为每个连接创建一
+个单独的线程或进程。
