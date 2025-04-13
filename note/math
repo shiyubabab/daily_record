@@ -12,3 +12,16 @@ A = | 2  3 |
 the column space C(A)
 all there linear combinations form a subspace.
 	multiplying by number and adding vectors.
+
+indepence : that looks at the conbinations not being zero;
+spanning  : that looks at the all conbinations;
+basis	  : that is the one conbines indepence and spanning;
+			Every basis of the space has the same number of vectors;Def dimension of the space.
+
+
+4 subspace: A is mxn
+column space C(A) R^m
+null space N(A) R^n
+row space ==> we always process column space, so we transport row space to column space C(A^T) R^n
+null space of A^T N(A^T) ==> left zero space of A R^m
+
