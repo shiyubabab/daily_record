@@ -25,3 +25,26 @@ null space N(A) R^n
 row space ==> we always process column space, so we transport row space to column space C(A^T) R^n
 null space of A^T N(A^T) ==> left zero space of A R^m
 
+						4 subspace
+
+					n is number of column
+					| 1 , 2 , 3 , 4 |	
+					| 2 , 2 , 7 , 0 | m is number of row
+					| 1 , 2 , 9 , 8 |
+
+			R^n								R^m
+	|----------------|				|-----------------|
+	|row space C(A^T)|				|column space C(A)|
+	|----------------|				|-----------------|
+
+	|---------------|				|-----------------|
+	|null space of A|				|null space of A^T|
+	|---------------|				|-----------------|
+   n = r(A^T) + r(n(A))			    m = r(A) + r(N(A^T))
+
+
+Graph = {
+	nodes,
+	edges
+}
+
