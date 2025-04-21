@@ -87,5 +87,18 @@ int main(void){
 	Eigen::MatrixXf Q = orthogonal(A);
 	cout<< "\nthe result of orthogonal, Q:\n"<< Q <<endl;
 
+	Eigen::MatrixXf I = Q.transpose()*Q;
+	for(int i = 0;i<m;i++){
+		for(int j = 0;j<m;j++){
+			if (I(i,j)<=1e-6){
+				I(i,j) = 0;
+			}
+		}
+	}
+	cout << "\n the result of Q^T*Q: \n"<< I << endl;
+
+
+
+
 	return 0;
 }
