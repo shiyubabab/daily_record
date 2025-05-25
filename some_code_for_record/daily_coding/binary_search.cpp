@@ -14,34 +14,26 @@ int q[N];
 
 int main(void){
 	scanf("%d%d",&n,&m);
-	for(int i = 0;i<n;i++) scanf("%d",&q[i]);
-	// 6 3
-	// 1 2 2 3 3 4
-	for(int i = 0;i<n;i++) printf("%d ",q[i]);
-	printf("\n");
-
+	for(int i = 0;i<n;i++) scanf("%d", &q[i]);
 	while(m--){
 		int x;
 		scanf("%d",&x);
-		printf("it is begin to [%d] \n",x);
-
-		int l=0,r=n-1;
+		int l = 0,r = n-1;
 		while(l<r){
-			int mid = l + r + 1 >> 1;
-			if(q[mid] <= x) l = mid;
-			else r = mid - 1;
+			int mid = l+r >> 1;
+			if(x<=q[mid]) r = mid;
+			else l = mid + 1;
 		}
 		if(q[l]!=x) cout << "-1 -1" << endl;
 		else{
-			cout << l << ' ';
-			int l=0,r=n-1;
+			cout << l << " ";
+			int l = 0,r=n-1;
 			while(l<r){
-				int mid = l + r >> 1;
-				if(q[mid] >= x) r = mid;
-				else l = mid + 1;
+				int mid = l+r+1 >> 1;
+				if(x>=q[mid]) l = mid;
+				else r = mid - 1;
 			}
-			cout << r << endl;
-			cout << "end of " << x << endl;
+			cout << l << endl;
 		}
 	}
 	return 0;
