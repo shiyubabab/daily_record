@@ -9,18 +9,18 @@
 using namespace std;
 
 int lowbit(int x){
-	return x & -x;
+	return x & (-x);
 }
 
 int main(void){
 	int n;
 	cin >> n;
 	while(n--){
-		int x;
+		int x,res=0;
 		cin >> x;
-		int res = 0;
-		while(x) x -= lowbit(x) , res++;
+		while(x) x -= lowbit(x),res++;
 		cout << res << endl;
 	}
 	return 0;
 }
+
