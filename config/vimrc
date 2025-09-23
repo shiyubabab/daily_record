@@ -14,7 +14,10 @@ set cursorcolumn
 set hlsearch
 set ignorecase
 
+
 set laststatus=2
+
+let mapleader = ' '
 
 inoremap jj <Esc>
 colorscheme desert
@@ -27,6 +30,30 @@ inoremap " ""<Esc>i
 inoremap ' ''<Esc>i
 inoremap [ []<Esc>i
 inoremap { {<CR>}<Esc>O
+
+nnoremap <leader>e [[
+nnoremap <leader>i ][
+nnoremap <leader>m %
+
+" 在不同的窗口之间跳转
+nnoremap <Leader>h <C-w>h
+nnoremap <Leader>j <C-w>j
+nnoremap <Leader>k <C-w>k
+nnoremap <Leader>l <C-w>l
+
+" 快速创建新的水平或垂直分屏
+nnoremap <Leader>s <C-w>s
+nnoremap <Leader>v <C-w>v
+
+" 快速关闭当前窗口
+nnoremap <Leader>q <C-w>q
+
+nnoremap <Leader>/ :grep -r "<C-r><C-w>" .<CR>
+"nnoremap <Leader>? :grep -r "<C-r><C-w>" ~/project/xiaomi/00_p65_250716/ --include=*.c --include=*.h <CR>
+
+" 将 netrw 窗口宽度设置为屏幕宽度的 20%
+let g:netrw_winsize = 20
+nnoremap <Leader><Leader> :Lexplore<CR>
 
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -58,12 +85,12 @@ func SetTitle()
 		call append(line(".")+5, "")
 	endif
 	if &filetype == 'cpp'
-		call append(line(".")+6, "#include<iostream>")
+		call append(line(".")+6, "#include <iostream>")
     	call append(line(".")+7, "using namespace std;")
 		call append(line(".")+8, "")
 	endif
 	if &filetype == 'c'
-		call append(line(".")+6, "#include<stdio.h>")
+		call append(line(".")+6, "#include <stdio.h>")
 		call append(line(".")+7, "")
 	endif
 	"	if &filetype == 'java'
