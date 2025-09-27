@@ -40,6 +40,50 @@ int main(void){
 	}
 //---- fork() 之前，打开socketpair()
 //父子进程之间共享资源：代码，数据、局部变量 / 全局变量 / 内存（写时复制）、文件
+/*
+   文件，在用户程序看到的 就是一个 文件句柄
+   内核里：
+		struct file;
+
+		struct fops{
+			int (*open)(const char* path,int flags,int mode);
+			int (*write)(struct file* f, const char* __user buf,int count);
+		};
+
+		struct file{
+			struct fops* fops;
+		};
+
+		struct task_struct{
+			struct file** files;
+			int			  nb_files;
+		};
+		文件在两个进程之间的共享：把 内核的 文件的结构体 填写到两个进程的task_struct里
+
+	用户态：
+		write(3,"hello",5);
+		current->files[3]->fops->write(current -> files[3],buf,count);
+
+	struct msghdr h = {0};
+	h.msg_name		= NULL;
+	h.msg_namelen   = 0;
+	h.msg_flags		= 0;
+
+	struct iovec io = {"f",1};
+	h.msg_iov		= &io;
+	h.msg_iovlen	= 1;
+
+	struct cmsghdr * cmsg;
+	union{
+		char buf[CMSG_SPACE(sizeof(int))];
+		struct cmsghdr align;
+	}u;
+//发送 带外数据 控制数据
+	h.msg_control	= u.buf;
+	h.msg_controllen= sizeof(u.buf);
+
+	cmsg = CMSG_FIRSTHDR(&h);
+*/
 	pid_t cpid = fork();
 	if(-1 == cpid){
 		printf("fork error\n");
