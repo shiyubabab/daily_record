@@ -48,6 +48,20 @@ int main(void){
 		struct fops{
 			int (*open)(const char* path,int flags,int mode);
 			int (*write)(struct file* f, const char* __user buf,int count);
+
+			int (*ioctl)(struct file *f, ...);
+			int (*mmap)(struct file* f, ...);
+
+			int (*socket)();
+			int (*send)();
+			int (*recv)();
+
+			int (*sendto)();
+			int (*recvfrom)();
+
+			int (*sendmsg)(); scatter/gather
+			int (*recvmsg)();
+
 		};
 
 		struct file{
@@ -83,6 +97,27 @@ int main(void){
 	h.msg_controllen= sizeof(u.buf);
 
 	cmsg = CMSG_FIRSTHDR(&h);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type  = SCM_RIGHTS;
+	cmsg->cmsg_len	 = CMSG_LEN(sizeof(int));
+	*(int*)CMSG_DATA(cmsg) = send_fd2;
+
+	ret = sendmsg(sv[1],&h,0);
+	if(ret<0){
+		printf("error %d\n",errno);
+		return -1;
+	}
+
+	scatter / gather 拆分/聚合 API
+	char* s0 = "hello";
+	char* s1 = "world";
+
+	struct iovec v[2] = {{s0,5},{s1,5}};
+	h.msg_iov = v;
+	h.iovlen  = 2;
+
+	atomic_inc(current->files[5]);
+	obj->files[4] = current -> files[5];
 */
 	pid_t cpid = fork();
 	if(-1 == cpid){
