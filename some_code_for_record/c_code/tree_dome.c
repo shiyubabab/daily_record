@@ -17,17 +17,28 @@
    定时器：管理结构 用 二叉树
    红黑树：各种数据，比普通二叉树 更平衡
    数据库：B+ 树 机械硬盘，磁道，扇区
-   表达式：多叉树
+   表达式：多叉树,运算符的优先级、结合性
  */
 
 typedef struct tree_s
 {
 	struct tree_s* left;
 	struct tree_s* right; 
-	//void*		   data;
-	//int		   priority;
-	//int          (*handler)(struct tree_s* node);
 	int			   d; 
+
+	//有向无环图 DAG
+	//struct tree_s** childs;
+	//int			 n_childs;
+
+	//struct tree_s** parent;
+	//int			 n_parent;
+
+	//int			 associativity; 结合性，0，1
+
+	//struct tree_s* parent;
+	//int		   priority;
+	//int          (*handler)(struct tree_s* node); //处理 运算符 的计算
+	//void*		   data;
 } tree_t;
 
 tree_t* root = NULL;
