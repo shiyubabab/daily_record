@@ -14,9 +14,16 @@ typedef struct{
 } scf_vector_t;
 
 typedef struct{
-	scf_vector_t* prevs;
-	scf_vector_t* nexts;
-	int				flag;
-	int				d;
+	scf_vector_t* prevs; // 动态数组 
+	scf_vector_t* nexts; // 动态数组
+	int			  flag;	 // 有没有访问过
+	int				d;	 // 携带的数据
 } graph_t;
+
+
+
+int main(void){
+
+	return 0;
+}
 
