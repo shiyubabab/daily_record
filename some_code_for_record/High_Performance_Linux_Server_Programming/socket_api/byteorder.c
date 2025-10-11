@@ -40,6 +40,7 @@ void byteorder(){
 
 
 int main(void){
+	printf("char : %d ,short : %d \n",sizeof(char),sizeof(short));
 	byteorder();
 	return 0;
 }
