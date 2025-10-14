@@ -16,7 +16,6 @@ typedef struct{
 
 typedef int (*function_return_int_t) (void *self);
 typedef void (*function_t) (void *self);
-
 typedef struct{
 	function_return_int_t add;
 	function_return_int_t sub;
