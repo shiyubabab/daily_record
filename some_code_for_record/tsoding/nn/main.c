@@ -146,8 +146,8 @@ int main(void)
 		.es = td + 2,
 	};
 
-	float eps  = 1e-1;
-	float rate = 1e-1;
+	float eps  = 1e-3;
+	float rate = 1e-2;
 
 	for(int i = 0;i<0*1000;i++){
 		finite_diff(m,g,eps,ti,to);
@@ -160,11 +160,32 @@ int main(void)
 			MAT_AT(m.a0,0,0) = i;
 			MAT_AT(m.a0,0,1) = j;
 			forward_xor(m);
-			printf("%zu ^ %zu = %f\n",i , j , *m.a2.es);
+			//printf("%zu ^ %zu = %f\n",i , j , *m.a2.es);
 		}
 	}
 
-	MAT_DUMP(m.a1);
+
+	size_t arch[] = {2, 2, 1};
+	NN nn = nn_alloc(arch,ARCH_LAYERS(arch));
+	NN gn = nn_alloc(arch,ARCH_LAYERS(arch));
+	nn_rand(nn,0,1);
+
+	for(int i = 0;i<500*1000;i++){
+		nn_finite_diff(nn,gn,eps,ti,to);
+		nn_learn(nn,gn,rate);
+		printf("loss = %f\n",nn_cost(nn,ti,to));
+	}
+
+	for(size_t i = 0;i<2;++i){
+		for(size_t j = 0;j<2;++j){
+			MAT_AT(NN_INPUT(nn),0,0) = i;
+			MAT_AT(NN_INPUT(nn),0,1) = j;
+			nn_forward(nn);
+			printf("%zu ^ %zu = %f\n",i , j , MAT_AT(NN_OUTPUT(nn),0,0));
+		}
+	}
+
+	NN_DUMP(nn);
 
 	return 0;
 }
