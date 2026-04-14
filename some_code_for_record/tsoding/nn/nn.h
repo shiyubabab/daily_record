@@ -78,7 +78,35 @@ void nn_forward(NN nn);
 void nn_rand(NN nn, size_t low, size_t height);
 float nn_cost(NN nn, Mat ti, Mat to);
 void nn_finite_diff(NN nn, NN gn, float eps, Mat ti, Mat to);
+void nn_backprop(NN nn, NN gn, Mat ti, Mat to);
 void nn_learn(NN nn, NN gn, float rate);
+
+/***************
+*  CNN DEFINE  *
+****************/
+typedef struct{
+	size_t rows;
+	size_t cols;
+	size_t channel;
+	size_t stride;
+	size_t padding;
+	Mat *ws;
+	Mat m;
+} Knl;
+
+typedef struct{
+	size_t rows;
+	size_t cols;
+	size_t channel;
+	Mat *ds;
+} Tdata;
+
+Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t padding);
+void cnn_unfold(Knl knl);
+
+Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel);
+Mat cnn_td_unfold(Tdata td, Knl knl);
+
 
 #endif //_NN_H_
 
@@ -345,6 +373,57 @@ void nn_finite_diff(NN nn, NN gn, float eps, Mat ti, Mat to)
 	}
 }
 
+void nn_backprop(NN nn, NN gn, Mat ti, Mat to)
+{
+	NN_ASSERT(ti.rows == to.rows);
+	size_t n = ti.rows;
+
+	for(size_t i = 0;i<gn.count;++i){
+		mat_fill(gn.ws[i],0);
+		mat_fill(gn.bs[i],0);
+	}
+
+	for(size_t i = 0;i < n;++i){
+		mat_copy(NN_INPUT(nn),mat_row(ti,i));
+		nn_forward(nn);
+
+		for(size_t l = 0; l<=nn.count; ++l) mat_fill(gn.as[l],0);
+
+		size_t L = nn.count;
+		for(size_t j = 0; j < nn.as[L].cols; ++j){
+			float a = MAT_AT(nn.as[L],0,j);
+			float y = MAT_AT(to,i,j);
+
+			MAT_AT(gn.as[L],0,j) = (a - y) * sigmoid_derf(a);
+		}
+
+		for(size_t l = L; l > 0; --l){
+			for(size_t j = 0;j<nn.as[l].cols; ++j){
+				float delta = MAT_AT(gn.as[l],0,j);
+				for(size_t k = 0;k<nn.as[l-1].cols;++k){
+					MAT_AT(gn.ws[l-1],k,j) += MAT_AT(nn.as[l-1],0,k) * delta;
+				}
+				MAT_AT(gn.bs[l-1],0,j) += delta;
+			}
+
+			if(l > 1) {
+				for(size_t k = 0; k < nn.as[l-1].cols; ++k){
+					float next_grad = 0;
+					for(size_t j = 0; j < nn.as[l].cols; ++j){
+						next_grad += MAT_AT(gn.as[l],0,j) * MAT_AT(nn.ws[l-1], k, j);
+					}
+					float a_prev = MAT_AT(nn.as[l-1], 0, k);
+					MAT_AT(gn.as[l-1], 0, k) = next_grad * sigmoid_derf(a_prev);
+				}
+			}
+		}
+	}
+	for(size_t i = 0; i < gn.count; ++i){
+		for(size_t j = 0; j < gn.ws[i].rows * gn.ws[i].cols; ++i) gn.ws[i].es[j] /= n;
+		for(size_t j = 0; j < gn.bs[i].rows * gn.bs[i].cols; ++i) gn.bs[i].es[j] /= n;
+	}
+}
+
 void nn_learn(NN nn, NN gn, float rate)
 {
 	size_t count = nn.count;
@@ -368,5 +447,106 @@ void nn_learn(NN nn, NN gn, float rate)
 	}
 
 }
+
+
+/********
+*  CNN  *
+*********/
+
+Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t padding)
+{
+	NN_ASSERT(rows > 0);
+	NN_ASSERT(cols > 0);
+	NN_ASSERT(channel > 0);
+
+	Knl ret;
+	ret.rows = rows;
+	ret.cols = cols;
+	ret.channel = channel;
+	ret.padding = padding;
+
+	size_t c = channel;
+	ret.ws = NN_MALLOC(sizeof(Mat)*c);
+	for(size_t i = 0; i<c ;++i){
+		ret.ws[i] = mat_alloc(ret.rows, ret.cols);
+	}
+	ret.m = mat_alloc(ret.rows*ret.cols, ret.channel);
+
+	return ret;
+}
+
+Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel)
+{
+	NN_ASSERT(rows > 0);
+	NN_ASSERT(cols > 0);
+	NN_ASSERT(channel > 0);
+
+	Tdata td;
+	td.rows = rows;
+	td.cols = cols;
+	td.channel = channel;
+	td.ds = NN_MALLOC(sizeof(Mat)*td.channel);
+	for(size_t i = 0; i<td.channel ;++i){
+		td.ds[i] = mat_alloc(td.rows, td.cols);
+	}
+
+	return td;
+}
+
+void cnn_unfold(Knl knl)
+{
+	NN_ASSERT(knl.rows > 0);
+	NN_ASSERT(knl.cols > 0);
+	NN_ASSERT(knl.channel > 0);
+
+	size_t kc = knl.channel;
+	for(size_t c = 0; c < kc; ++c){
+
+		size_t mrow = 0;
+		for(size_t i = 0; i<knl.rows; ++i){
+			for(size_t j = 0; j<knl.cols; ++j){
+				MAT_AT(knl.m,mrow,c) = MAT_AT(knl.ws[c],i,j);
+				mrow++;
+			}
+		}
+	}
+}
+
+Mat cnn_td_unfold(Tdata td, Knl knl)
+{
+	size_t out_h = (td.rows + 2*knl.padding - knl.rows) / knl.stride + 1;
+	size_t out_w = (td.cols + 2*knl.padding - knl.cols) / knl.stride + 1;
+
+	size_t dh = out_h * out_w; 
+	size_t dw = knl.rows * knl.cols * td.channel;
+
+	Mat ret = mat_alloc(dh,dw);
+
+	size_t curr_row = 0;
+	for(size_t y = -knl.padding; y <= (td.rows + knl.padding - knl.rows); y += knl.stride){
+		for(size_t x = -knl.padding; x <= (td.cols + knl.padding - knl.cols); y += knl.stride){
+
+			size_t curr_col = 0;
+			for(size_t c = 0; c < td.channel; ++c){
+				for(size_t ky = 0; ky < knl.rows; ++ky){
+					for(size_t kx = 0; kx < knl.cols; ++kx){
+						int iy = y + (int)ky;
+						int ix = x + (int)kx;
+
+						float val = 0.f;
+						if(iy >=0 && iy < (int)td.rows && ix>=0 && ix < (int)td.cols ){
+							val = MAT_AT(td.ds[c],iy,ix);
+						}
+						MAT_AT(ret,curr_row,curr_col) = val;
+						curr_col++;
+					}
+				}
+			}
+			curr_row++;
+		}
+	}
+	return ret;
+}
+
 
 #endif //NN_IMPLEMENTATION

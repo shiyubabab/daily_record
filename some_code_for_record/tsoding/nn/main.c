@@ -123,14 +123,6 @@ int main(void)
 {
 	srand(time(0));
 
-	Xor m = xor_alloc();
-	Xor g = xor_alloc();
-
-	mat_rand(m.w1,0,1);
-	mat_rand(m.b1,0,1);
-	mat_rand(m.w2,0,1);
-	mat_rand(m.b2,0,1);
-
 	size_t r = sizeof(td) / sizeof(*td) / 3;
 	Mat ti = {
 		.rows = r,
@@ -146,10 +138,18 @@ int main(void)
 		.es = td + 2,
 	};
 
-	float eps  = 1e-3;
-	float rate = 1e-2;
+	float rate = 1e-1;
 
-	for(int i = 0;i<0*1000;i++){
+#if 0
+	Xor m = xor_alloc();
+	Xor g = xor_alloc();
+
+	mat_rand(m.w1,0,1);
+	mat_rand(m.b1,0,1);
+	mat_rand(m.w2,0,1);
+	mat_rand(m.b2,0,1);
+
+	for(int i = 0;i<100*1000;i++){
 		finite_diff(m,g,eps,ti,to);
 		learning(m,g,rate);
 		printf("loss = %f\n",cost(m,ti,to));
@@ -163,6 +163,7 @@ int main(void)
 			//printf("%zu ^ %zu = %f\n",i , j , *m.a2.es);
 		}
 	}
+#endif
 
 
 	size_t arch[] = {2, 2, 1};
@@ -171,7 +172,9 @@ int main(void)
 	nn_rand(nn,0,1);
 
 	for(int i = 0;i<500*1000;i++){
-		nn_finite_diff(nn,gn,eps,ti,to);
+		//float eps  = 1e-1;
+		//nn_finite_diff(nn,gn,eps,ti,to);
+		nn_backprop(nn,gn,ti,to);
 		nn_learn(nn,gn,rate);
 		printf("loss = %f\n",nn_cost(nn,ti,to));
 	}
