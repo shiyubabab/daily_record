@@ -56,6 +56,7 @@ void mat_add(Mat a, Mat b);
 void mat_act(Mat m,activate_callback cb);
 void mat_copy(Mat dst, Mat src);
 Mat mat_row(Mat m, size_t row);
+void mat_reshape(Mat *m, size_t rows, size_t cols);
 
 /***************
 *	NN DEFINE  *
@@ -101,8 +102,12 @@ typedef struct{
 	Mat *ds;
 } Tdata;
 
-Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t padding);
+#define OUT_H(td,knl) ((td).rows + 2 * (knl).padding - (knl).rows) / (knl).stride + 1
+#define OUT_W(td,knl) ((td).cols + 2 * (knl).padding - (knl).cols) / (knl).stride + 1
+
+Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t stride, size_t padding);
 void cnn_unfold(Knl knl);
+void cnn_rand(Knl knl,size_t low, size_t height);
 
 Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel);
 Mat cnn_td_unfold(Tdata td, Knl knl);
@@ -238,6 +243,13 @@ Mat mat_row(Mat m, size_t row)
 		.stride = m.stride,
 		.es	  = &MAT_AT(m,row,0),
 	};
+}
+
+void mat_reshape(Mat *m, size_t rows, size_t cols)
+{
+	NN_ASSERT(m->rows * m->cols == rows * cols);
+	m->rows = rows;
+	m->cols = cols;
 }
 
 /********
@@ -419,8 +431,8 @@ void nn_backprop(NN nn, NN gn, Mat ti, Mat to)
 		}
 	}
 	for(size_t i = 0; i < gn.count; ++i){
-		for(size_t j = 0; j < gn.ws[i].rows * gn.ws[i].cols; ++i) gn.ws[i].es[j] /= n;
-		for(size_t j = 0; j < gn.bs[i].rows * gn.bs[i].cols; ++i) gn.bs[i].es[j] /= n;
+		for(size_t j = 0; j < gn.ws[i].rows * gn.ws[i].cols; ++j) gn.ws[i].es[j] /= n;
+		for(size_t j = 0; j < gn.bs[i].rows * gn.bs[i].cols; ++j) gn.bs[i].es[j] /= n;
 	}
 }
 
@@ -453,7 +465,7 @@ void nn_learn(NN nn, NN gn, float rate)
 *  CNN  *
 *********/
 
-Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t padding)
+Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t stride, size_t padding)
 {
 	NN_ASSERT(rows > 0);
 	NN_ASSERT(cols > 0);
@@ -463,16 +475,24 @@ Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t padding)
 	ret.rows = rows;
 	ret.cols = cols;
 	ret.channel = channel;
+	ret.stride = stride;
 	ret.padding = padding;
 
-	size_t c = channel;
-	ret.ws = NN_MALLOC(sizeof(Mat)*c);
-	for(size_t i = 0; i<c ;++i){
+	ret.ws = NN_MALLOC(sizeof(Mat)*ret.channel);
+	for(size_t i = 0; i<ret.channel ;++i){
 		ret.ws[i] = mat_alloc(ret.rows, ret.cols);
 	}
-	ret.m = mat_alloc(ret.rows*ret.cols, ret.channel);
+	ret.m = mat_alloc(ret.rows * ret.cols * ret.channel , 1);
 
 	return ret;
+}
+
+void cnn_rand(Knl knl,size_t low, size_t height)
+{
+	NN_ASSERT(low < height);
+	for(size_t c = 0; c < knl.channel; ++c){
+		mat_rand(knl.ws[c], low, height);
+	}
 }
 
 Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel)
@@ -500,12 +520,12 @@ void cnn_unfold(Knl knl)
 	NN_ASSERT(knl.channel > 0);
 
 	size_t kc = knl.channel;
+	size_t mrow = 0;
 	for(size_t c = 0; c < kc; ++c){
 
-		size_t mrow = 0;
 		for(size_t i = 0; i<knl.rows; ++i){
 			for(size_t j = 0; j<knl.cols; ++j){
-				MAT_AT(knl.m,mrow,c) = MAT_AT(knl.ws[c],i,j);
+				MAT_AT(knl.m,mrow,0) = MAT_AT(knl.ws[c],i,j);
 				mrow++;
 			}
 		}
@@ -514,8 +534,8 @@ void cnn_unfold(Knl knl)
 
 Mat cnn_td_unfold(Tdata td, Knl knl)
 {
-	size_t out_h = (td.rows + 2*knl.padding - knl.rows) / knl.stride + 1;
-	size_t out_w = (td.cols + 2*knl.padding - knl.cols) / knl.stride + 1;
+	size_t out_h = OUT_H(td,knl);
+	size_t out_w = OUT_W(td,knl);
 
 	size_t dh = out_h * out_w; 
 	size_t dw = knl.rows * knl.cols * td.channel;
@@ -523,8 +543,8 @@ Mat cnn_td_unfold(Tdata td, Knl knl)
 	Mat ret = mat_alloc(dh,dw);
 
 	size_t curr_row = 0;
-	for(size_t y = -knl.padding; y <= (td.rows + knl.padding - knl.rows); y += knl.stride){
-		for(size_t x = -knl.padding; x <= (td.cols + knl.padding - knl.cols); y += knl.stride){
+	for(int y = -(int)knl.padding; y <= (int)(td.rows + knl.padding - knl.rows); y += (int)knl.stride){
+		for(int x = -(int)knl.padding; x <= (int)(td.cols + knl.padding - knl.cols); x += (int)knl.stride){
 
 			size_t curr_col = 0;
 			for(size_t c = 0; c < td.channel; ++c){
@@ -537,6 +557,7 @@ Mat cnn_td_unfold(Tdata td, Knl knl)
 						if(iy >=0 && iy < (int)td.rows && ix>=0 && ix < (int)td.cols ){
 							val = MAT_AT(td.ds[c],iy,ix);
 						}
+
 						MAT_AT(ret,curr_row,curr_col) = val;
 						curr_col++;
 					}
