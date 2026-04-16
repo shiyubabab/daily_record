@@ -166,7 +166,7 @@ int main(void)
 #endif
 
 
-	size_t arch[] = {2, 5, 2, 1};
+	size_t arch[] = {2, 2, 1};
 	NN nn = nn_alloc(arch,ARCH_LAYERS(arch));
 	NN gn = nn_alloc(arch,ARCH_LAYERS(arch));
 	nn_rand(nn,0,1);

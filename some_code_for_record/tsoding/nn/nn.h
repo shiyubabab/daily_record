@@ -19,7 +19,7 @@
 #define NN_ASSERT assert
 #endif
 
-#ifndef NN_PRINT
+#ifndef NN_INFO
 #include <stdio.h>
 #define NN_INFO printf
 #endif
@@ -88,7 +88,8 @@ void nn_learn(NN nn, NN gn, float rate);
 typedef struct{
 	size_t rows;
 	size_t cols;
-	size_t channel;
+	size_t in_channel;
+	size_t out_channel;
 	size_t stride;
 	size_t padding;
 	Mat *ws;
@@ -105,13 +106,34 @@ typedef struct{
 #define OUT_H(td,knl) ((td).rows + 2 * (knl).padding - (knl).rows) / (knl).stride + 1
 #define OUT_W(td,knl) ((td).cols + 2 * (knl).padding - (knl).cols) / (knl).stride + 1
 
-Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t stride, size_t padding);
-void cnn_unfold(Knl knl);
-void cnn_rand(Knl knl,size_t low, size_t height);
-
+Knl cnn_knl_alloc(size_t rows, size_t cols, size_t in_channel,size_t out_channel,size_t stride, size_t padding);
+void cnn_knl_unfold(Knl knl);
+void cnn_knl_rand(Knl knl,size_t low, size_t height);
 Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel);
 Mat cnn_td_unfold(Tdata td, Knl knl);
+void cnn_output_to_tdata(Mat dot_result, Tdata next_input);
 
+//TODO Cnn Layer
+
+typedef struct {
+	Knl knl;
+	Mat bias;
+
+	Mat input_unfolded;
+	Mat dot_result;
+
+	Tdata output;
+} CnnLayer;
+
+CnnLayer cnn_layer_alloc(size_t in_h, size_t in_w, size_t in_c, 
+						 size_t k_size, size_t out_c,
+						 size_t stride, size_t padding);
+CnnLayer cnn_layer_create(size_t in_h, size_t in_w, size_t in_c, 
+						 size_t k_size, size_t out_c,
+						 size_t stride, size_t padding);
+void cnn_layer_forward(CnnLayer layer, Tdata input);
+void cnn_layer_dump(CnnLayer layer, char * name, size_t padding);
+#define LAYER_DUMP(layer) cnn_layer_dump(layer,#layer,0)
 
 #endif //_NN_H_
 
@@ -385,6 +407,7 @@ void nn_finite_diff(NN nn, NN gn, float eps, Mat ti, Mat to)
 	}
 }
 
+//fuck fuck fuck back prop !!!!
 void nn_backprop(NN nn, NN gn, Mat ti, Mat to)
 {
 	NN_ASSERT(ti.rows == to.rows);
@@ -465,32 +488,34 @@ void nn_learn(NN nn, NN gn, float rate)
 *  CNN  *
 *********/
 
-Knl cnn_alloc(size_t rows, size_t cols, size_t channel, size_t stride, size_t padding)
+Knl cnn_knl_alloc(size_t rows, size_t cols, size_t in_channel,size_t out_channel,size_t stride, size_t padding)
 {
 	NN_ASSERT(rows > 0);
 	NN_ASSERT(cols > 0);
-	NN_ASSERT(channel > 0);
+	NN_ASSERT(in_channel > 0);
+	NN_ASSERT(out_channel > 0);
 
 	Knl ret;
 	ret.rows = rows;
 	ret.cols = cols;
-	ret.channel = channel;
+	ret.in_channel = in_channel;
+	ret.out_channel = out_channel;
 	ret.stride = stride;
 	ret.padding = padding;
 
-	ret.ws = NN_MALLOC(sizeof(Mat)*ret.channel);
-	for(size_t i = 0; i<ret.channel ;++i){
+	ret.ws = NN_MALLOC(sizeof(Mat) * ret.in_channel * ret.out_channel);
+	for(size_t i = 0; i<ret.in_channel * out_channel; ++i){
 		ret.ws[i] = mat_alloc(ret.rows, ret.cols);
 	}
-	ret.m = mat_alloc(ret.rows * ret.cols * ret.channel , 1);
+	ret.m = mat_alloc(ret.rows * ret.cols * ret.in_channel , ret.out_channel);
 
 	return ret;
 }
 
-void cnn_rand(Knl knl,size_t low, size_t height)
+void cnn_knl_rand(Knl knl,size_t low, size_t height)
 {
 	NN_ASSERT(low < height);
-	for(size_t c = 0; c < knl.channel; ++c){
+	for(size_t c = 0; c < knl.in_channel * knl.out_channel; ++c){
 		mat_rand(knl.ws[c], low, height);
 	}
 }
@@ -513,20 +538,22 @@ Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel)
 	return td;
 }
 
-void cnn_unfold(Knl knl)
+void cnn_knl_unfold(Knl knl)
 {
 	NN_ASSERT(knl.rows > 0);
 	NN_ASSERT(knl.cols > 0);
-	NN_ASSERT(knl.channel > 0);
+	NN_ASSERT(knl.in_channel > 0);
+	NN_ASSERT(knl.out_channel > 0);
 
-	size_t kc = knl.channel;
-	size_t mrow = 0;
-	for(size_t c = 0; c < kc; ++c){
-
-		for(size_t i = 0; i<knl.rows; ++i){
-			for(size_t j = 0; j<knl.cols; ++j){
-				MAT_AT(knl.m,mrow,0) = MAT_AT(knl.ws[c],i,j);
-				mrow++;
+	for(size_t oc = 0; oc < knl.out_channel; ++oc){
+		size_t mrow = 0;
+		for(size_t ic = 0; ic < knl.in_channel; ++ic){
+			Mat current_w = knl.ws[oc * knl.in_channel + ic];
+			for(size_t i = 0; i<knl.rows; ++i){
+				for(size_t j = 0; j<knl.cols; ++j){
+					MAT_AT(knl.m,mrow,oc) = MAT_AT(current_w,i,j);
+					mrow++;
+				}
 			}
 		}
 	}
@@ -569,5 +596,107 @@ Mat cnn_td_unfold(Tdata td, Knl knl)
 	return ret;
 }
 
+void cnn_output_to_tdata(Mat dot_result, Tdata next_input)
+{
+	size_t out_h = next_input.rows;
+	size_t out_w = next_input.cols;
+	size_t out_c = next_input.channel;
+
+	NN_ASSERT(dot_result.rows == out_h * out_w);
+	NN_ASSERT(dot_result.cols == out_c);
+
+	for(size_t c = 0; c < out_c; ++c){
+		NN_ASSERT(next_input.ds[c].rows == out_h);
+		NN_ASSERT(next_input.ds[c].cols == out_w);
+
+		for(size_t i = 0; i<out_h; ++i){
+			for(size_t j = 0; j<out_w; ++j){
+				float val = MAT_AT(dot_result,i*out_w+j,c);
+				MAT_AT(next_input.ds[c],i,j) = val;
+			}
+		}
+	}
+}
+
+//TODO CnnLayer
+/*
+typedef struct {
+	Knl knl;
+	Mat bias;
+
+	Mat input_unfolded;
+	Mat dot_result;
+
+	Tdata output;
+} CnnLayer;
+*/
+
+CnnLayer cnn_layer_alloc(size_t in_h, size_t in_w, size_t in_c, 
+						 size_t k_size, size_t out_c,
+						 size_t stride, size_t padding)
+{
+	CnnLayer layer;
+
+	layer.knl = cnn_knl_alloc( k_size, k_size, in_c, out_c, stride, padding);
+
+	layer.bias = mat_alloc(1,out_c);
+	mat_fill(layer.bias,0);
+
+	size_t out_h = (in_h + 2*padding - k_size) / stride + 1;
+	size_t out_w = (in_w + 2*padding - k_size) / stride + 1;
+	layer.output = cnn_td_alloc(out_h, out_w, out_c);
+
+	layer.input_unfolded = mat_alloc(out_h * out_w, k_size*k_size*in_c);
+
+	layer.dot_result = mat_alloc(out_h * out_w, out_c);
+
+	return layer;
+}
+
+CnnLayer cnn_layer_create(size_t in_h, size_t in_w, size_t in_c, 
+						 size_t k_size, size_t out_c,
+						 size_t stride, size_t padding)
+{
+	CnnLayer layer = cnn_layer_alloc(in_h,in_w,in_c,k_size,out_c,stride,padding);
+
+	cnn_knl_rand(layer.knl,0,1);
+	mat_rand(layer.bias, 0, 1);
+
+	return layer;
+}
+
+void cnn_layer_forward(CnnLayer layer, Tdata input)
+{
+	layer.input_unfolded = cnn_td_unfold(input, layer.knl);
+
+	cnn_knl_unfold(layer.knl);
+
+	mat_dot(layer.dot_result, layer.input_unfolded, layer.knl.m);
+
+	for(size_t i = 0; i < layer.dot_result.rows; ++i) {
+		for(size_t j = 0; j < layer.dot_result.cols; ++j) {
+			MAT_AT(layer.dot_result, i, j) += MAT_AT(layer.bias, 0, j);
+		}
+	}
+
+	mat_act(layer.dot_result,sigmoidf);
+	
+	cnn_output_to_tdata(layer.dot_result, layer.output);
+}
+
+void cnn_layer_dump(CnnLayer layer, char * name, size_t padding)
+{
+	NN_INFO("%*s%s = [\n",(int)padding,"",name);
+	char buf[256];
+	for(size_t i = 0;i<layer.knl.out_channel;++i){
+		snprintf(buf,sizeof(buf),"ws[%zu]",i);
+		mat_dump(layer.knl.ws[i],buf,4);
+	}
+
+	snprintf(buf,sizeof(buf),"%s bias",name);
+	mat_dump(layer.bias,buf,4);
+
+	NN_INFO("]\n");
+}
 
 #endif //NN_IMPLEMENTATION

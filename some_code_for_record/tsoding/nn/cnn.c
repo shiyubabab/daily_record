@@ -9,6 +9,8 @@
 #define NN_IMPLEMENTATION
 #include "nn.h"
 
+#include <time.h>
+
 float data[] = {
 	1, 1, 0,
 	1, 0, 1,
@@ -27,10 +29,8 @@ float data[] = {
 };
 
 int main(void){
-	Knl knl  = cnn_alloc(3,3,3,1,1);
+	srand(time(NULL));
 	Tdata td = cnn_td_alloc(4,3,3);
-
-	cnn_rand(knl,0,1);
 
 	for(size_t c = 0; c < td.channel; ++c){
 
@@ -45,16 +45,16 @@ int main(void){
 		printf("\n");
 	}
 
-	cnn_unfold(knl);
-	Mat td_unfold = cnn_td_unfold(td,knl);
+	CnnLayer layer_in = cnn_layer_create(4,3,3,3,16,1,1);
+	cnn_layer_forward(layer_in, td);
 
-	size_t out_h = OUT_H(td,knl);
-	size_t out_w = OUT_W(td,knl);
-	Mat result = mat_alloc(out_h * out_w,1);
-	mat_dot(result,td_unfold,knl.m);
-	mat_reshape(&result, td.rows, td.cols);
+	CnnLayer layer_2 = cnn_layer_create(4,3,16,3,3,1,1);
+	cnn_layer_forward(layer_2, layer_in.output);
 
-	MAT_DUMP(result);
+	MAT_DUMP(layer_in.dot_result);
+
+	LAYER_DUMP(layer_in);
+	LAYER_DUMP(layer_2);
 
 	return 0;
 }
