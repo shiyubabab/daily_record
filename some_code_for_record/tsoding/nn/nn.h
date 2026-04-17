@@ -52,11 +52,14 @@ void mat_rand(Mat m, size_t low, size_t hight);
 void mat_dump(Mat m,char *name,size_t padding);
 #define MAT_DUMP(m) mat_dump(m,#m,0)
 void mat_dot(Mat c, Mat a, Mat b);
+void mat_dot_at_b(Mat c, Mat a, Mat b);
+void mat_dot_a_bt(Mat c, Mat a, Mat b);
 void mat_add(Mat a, Mat b);
 void mat_act(Mat m,activate_callback cb);
 void mat_copy(Mat dst, Mat src);
 Mat mat_row(Mat m, size_t row);
 void mat_reshape(Mat *m, size_t rows, size_t cols);
+void mat_transpose(Mat dst, Mat src);
 
 /***************
 *	NN DEFINE  *
@@ -85,6 +88,8 @@ void nn_learn(NN nn, NN gn, float rate);
 /***************
 *  CNN DEFINE  *
 ****************/
+
+//TODO Cnn Knl
 typedef struct{
 	size_t rows;
 	size_t cols;
@@ -96,6 +101,12 @@ typedef struct{
 	Mat m;
 } Knl;
 
+
+Knl cnn_knl_alloc(size_t rows, size_t cols, size_t in_channel,size_t out_channel,size_t stride, size_t padding);
+void cnn_knl_unfold(Knl knl);
+void cnn_knl_rand(Knl knl,size_t low, size_t height);
+
+//TODO Cnn Traning Data
 typedef struct{
 	size_t rows;
 	size_t cols;
@@ -106,23 +117,27 @@ typedef struct{
 #define OUT_H(td,knl) ((td).rows + 2 * (knl).padding - (knl).rows) / (knl).stride + 1
 #define OUT_W(td,knl) ((td).cols + 2 * (knl).padding - (knl).cols) / (knl).stride + 1
 
-Knl cnn_knl_alloc(size_t rows, size_t cols, size_t in_channel,size_t out_channel,size_t stride, size_t padding);
-void cnn_knl_unfold(Knl knl);
-void cnn_knl_rand(Knl knl,size_t low, size_t height);
 Tdata cnn_td_alloc(size_t rows, size_t cols, size_t channel);
 Mat cnn_td_unfold(Tdata td, Knl knl);
-void cnn_output_to_tdata(Mat dot_result, Tdata next_input);
+void cnn_td_fold(Mat unfolded, Tdata td, Knl knl);
+void cnn_td_output_to_tdata(Mat dot_result, Tdata next_input);
+void cnn_td_dump(Tdata td, char * name, size_t padding);
+#define TDATA_DUMP(td) cnn_td_dump(td,#td,0)
 
 //TODO Cnn Layer
-
 typedef struct {
 	Knl knl;
 	Mat bias;
 
+	Tdata input;
 	Mat input_unfolded;
 	Mat dot_result;
-
 	Tdata output;
+
+	Knl gknl;
+	Mat gbias;
+	Mat gdot_result;	// activate function  (dZ)
+	Tdata ginput;		// pass to last layer (dX)
 } CnnLayer;
 
 CnnLayer cnn_layer_alloc(size_t in_h, size_t in_w, size_t in_c, 
@@ -134,6 +149,7 @@ CnnLayer cnn_layer_create(size_t in_h, size_t in_w, size_t in_c,
 void cnn_layer_forward(CnnLayer layer, Tdata input);
 void cnn_layer_dump(CnnLayer layer, char * name, size_t padding);
 #define LAYER_DUMP(layer) cnn_layer_dump(layer,#layer,0)
+void cnn_layer_backprop(CnnLayer layer, Tdata next_grad);
 
 #endif //_NN_H_
 
@@ -223,6 +239,38 @@ void mat_dot(Mat c, Mat a, Mat b)
 	}
 }
 
+void mat_dot_at_b(Mat c, Mat a, Mat b)
+{
+	NN_ASSERT(a.rows == b.rows);
+	NN_ASSERT(c.rows == a.cols);
+	NN_ASSERT(c.cols == b.cols);
+
+	for(size_t i = 0;i<c.rows;++i){
+		for(size_t j = 0;j<c.cols;++j){
+			MAT_AT(c,i,j) = 0.f;
+			for(size_t k = 0;k<a.cols;++k){
+				MAT_AT(c,i,j) += MAT_AT(a,k,i) * MAT_AT(b,k,j);
+			}
+		}
+	}
+}
+
+void mat_dot_a_bt(Mat c, Mat a, Mat b)
+{
+	NN_ASSERT(a.cols == b.cols);
+	NN_ASSERT(c.rows == a.rows);
+	NN_ASSERT(c.cols == b.rows);
+
+	for(size_t i = 0;i<c.rows;++i){
+		for(size_t j = 0;j<c.cols;++j){
+			MAT_AT(c,i,j) = 0.f;
+			for(size_t k = 0;k<a.cols;++k){
+				MAT_AT(c,i,j) += MAT_AT(a,i,k) * MAT_AT(b,j,k);
+			}
+		}
+	}
+}
+
 void mat_add(Mat a, Mat b)
 {
 	NN_ASSERT(a.rows == b.rows);
@@ -272,6 +320,18 @@ void mat_reshape(Mat *m, size_t rows, size_t cols)
 	NN_ASSERT(m->rows * m->cols == rows * cols);
 	m->rows = rows;
 	m->cols = cols;
+}
+
+void mat_transpose(Mat dst, Mat src)
+{
+	NN_ASSERT(dst.rows == src.cols);
+	NN_ASSERT(dst.cols == src.rows);
+
+	for(size_t i = 0;i<src.rows;++i){
+		for(size_t j = 0;j<src.cols;++j){
+			MAT_AT(dst, j , i) = MAT_AT(src, i, j);
+		}
+	}
 }
 
 /********
@@ -441,7 +501,7 @@ void nn_backprop(NN nn, NN gn, Mat ti, Mat to)
 				MAT_AT(gn.bs[l-1],0,j) += delta;
 			}
 
-			if(l > 1) {
+			if(l > 0) {
 				for(size_t k = 0; k < nn.as[l-1].cols; ++k){
 					float next_grad = 0;
 					for(size_t j = 0; j < nn.as[l].cols; ++j){
@@ -596,7 +656,37 @@ Mat cnn_td_unfold(Tdata td, Knl knl)
 	return ret;
 }
 
-void cnn_output_to_tdata(Mat dot_result, Tdata next_input)
+void cnn_td_fold(Mat unfolded, Tdata td, Knl knl)
+{
+	for (size_t c = 0; c<td.channel;++c){
+		mat_fill(td.ds[c],0.0f);
+	}
+
+	size_t curr_row = 0;
+	for(int y = -(int)knl.padding; y <= (int)(td.rows + knl.padding - knl.rows); y += (int)knl.stride){
+		for(int x = -(int)knl.padding; x <= (int)(td.cols + knl.padding - knl.cols); x += (int)knl.stride){
+
+			size_t curr_col = 0;
+			for(size_t c = 0; c < td.channel; ++c){
+				for(size_t ky = 0; ky < knl.rows; ++ky){
+					for(size_t kx = 0; kx < knl.cols; ++kx){
+						int iy = y + (int)ky;
+						int ix = x + (int)kx;
+
+						if(iy >=0 && iy < (int)td.rows && ix>=0 && ix < (int)td.cols ){
+							float grad_val = MAT_AT(unfolded,curr_row,curr_col);
+							MAT_AT(td.ds[c],iy,ix) += grad_val;
+						}
+						curr_col++;
+					}
+				}
+			}
+			curr_row++;
+		}
+	}
+}
+
+void cnn_td_output_to_tdata(Mat dot_result, Tdata next_input)
 {
 	size_t out_h = next_input.rows;
 	size_t out_w = next_input.cols;
@@ -618,37 +708,60 @@ void cnn_output_to_tdata(Mat dot_result, Tdata next_input)
 	}
 }
 
+void cnn_td_dump(Tdata td, char * name, size_t padding)
+{
+	NN_INFO("%*s%s = [\n",(int)padding,"",name);
+	char buf[256];
+	for(size_t i = 0;i<td.channel;++i){
+		snprintf(buf,sizeof(buf),"ws[%zu]",i);
+		mat_dump(td.ds[i],buf,padding+4);
+	}
+	NN_INFO("%*s]\n",(int)padding,"");
+}
+
 //TODO CnnLayer
 /*
 typedef struct {
 	Knl knl;
 	Mat bias;
 
+	Tdata input;
 	Mat input_unfolded;
 	Mat dot_result;
-
 	Tdata output;
+
+	knl gknl;
+	Mat gbias;
+	Mat gdot_result;	// activate function  (dZ)
+	Tdata ginput;		// pass to last layer (dX)
 } CnnLayer;
 */
-
 CnnLayer cnn_layer_alloc(size_t in_h, size_t in_w, size_t in_c, 
 						 size_t k_size, size_t out_c,
 						 size_t stride, size_t padding)
 {
 	CnnLayer layer;
 
+	layer.input = cnn_td_alloc(in_h, in_w, in_c);
+
 	layer.knl = cnn_knl_alloc( k_size, k_size, in_c, out_c, stride, padding);
+	layer.gknl = cnn_knl_alloc( k_size, k_size, in_c, out_c, stride, padding);
 
 	layer.bias = mat_alloc(1,out_c);
+	layer.gbias = mat_alloc(1,out_c);
 	mat_fill(layer.bias,0);
+	mat_fill(layer.gbias,0);
 
 	size_t out_h = (in_h + 2*padding - k_size) / stride + 1;
 	size_t out_w = (in_w + 2*padding - k_size) / stride + 1;
 	layer.output = cnn_td_alloc(out_h, out_w, out_c);
 
+	layer.ginput = cnn_td_alloc(in_h, in_w, in_c);
+
 	layer.input_unfolded = mat_alloc(out_h * out_w, k_size*k_size*in_c);
 
 	layer.dot_result = mat_alloc(out_h * out_w, out_c);
+	layer.gdot_result = mat_alloc(out_h * out_w, out_c);
 
 	return layer;
 }
@@ -667,10 +780,15 @@ CnnLayer cnn_layer_create(size_t in_h, size_t in_w, size_t in_c,
 
 void cnn_layer_forward(CnnLayer layer, Tdata input)
 {
+	NN_ASSERT(input.channel == layer.input.channel);
+	NN_ASSERT(input.rows == layer.input.rows);
+	NN_ASSERT(input.cols == layer.input.cols);
+	for(size_t c = 0;c<layer.input.channel;++c){
+		mat_copy(layer.input.ds[c], input.ds[c]);
+	}
+
 	layer.input_unfolded = cnn_td_unfold(input, layer.knl);
-
 	cnn_knl_unfold(layer.knl);
-
 	mat_dot(layer.dot_result, layer.input_unfolded, layer.knl.m);
 
 	for(size_t i = 0; i < layer.dot_result.rows; ++i) {
@@ -681,20 +799,100 @@ void cnn_layer_forward(CnnLayer layer, Tdata input)
 
 	mat_act(layer.dot_result,sigmoidf);
 	
-	cnn_output_to_tdata(layer.dot_result, layer.output);
+	cnn_td_output_to_tdata(layer.dot_result, layer.output);
+}
+
+void cnn_layer_backprop(CnnLayer layer, Tdata next_grad)
+{
+	NN_ASSERT(layer.output.channel == next_grad.channel);
+	NN_ASSERT(layer.output.rows == next_grad.rows);
+	NN_ASSERT(layer.output.cols == next_grad.cols);
+	//dz
+	for(size_t c = 0; c < next_grad.channel; ++c){
+		for(size_t i = 0; i < next_grad.rows; ++i){
+			for(size_t j = 0; j < next_grad.cols; ++j){
+				float a = MAT_AT(layer.output.ds[c],i,j);
+				float da = MAT_AT(next_grad.ds[c],i,j);
+
+				size_t row_idx = i * next_grad.cols + j;
+				MAT_AT(layer.gdot_result, row_idx, c) = da * sigmoid_derf(a);
+			}
+		}
+	}
+
+	//db
+	mat_fill(layer.gbias, 0.0f);
+	for(size_t j = 0; j < layer.gdot_result.cols; ++j){
+		for(size_t i = 0; i < layer.gdot_result.rows; ++i){
+			MAT_AT(layer.gbias, 0, j) += MAT_AT(layer.gdot_result, i, j);
+		}
+	}
+
+	//dw
+	Mat dw_matrix = mat_alloc(layer.knl.m.rows,layer.knl.m.cols);
+	mat_dot_at_b(dw_matrix, layer.input_unfolded, layer.gdot_result);
+
+	for(size_t oc = 0; oc < layer.knl.out_channel; ++oc){
+		size_t mrow = 0;
+		for(size_t ic = 0; ic < layer.knl.in_channel; ++ic){
+			Mat g_kernel = layer.gknl.ws[oc * layer.knl.in_channel + ic];
+			for(size_t i = 0; i < g_kernel.rows; ++i){
+				for(size_t j = 0; j < g_kernel.cols; ++j){
+					MAT_AT(g_kernel, i, j) = MAT_AT(dw_matrix, mrow, oc);
+					mrow++;
+				}
+			}
+		}
+	}
+	free(dw_matrix.es);
+
+	Mat dx_unfolded = mat_alloc(layer.gdot_result.rows, layer.knl.m.rows);
+	mat_dot_a_bt(dx_unfolded,layer.gdot_result, layer.knl.m);
+
+	cnn_td_fold(dx_unfolded, layer.ginput, layer.knl);
+	free(dx_unfolded.es);
 }
 
 void cnn_layer_dump(CnnLayer layer, char * name, size_t padding)
 {
 	NN_INFO("%*s%s = [\n",(int)padding,"",name);
 	char buf[256];
+
+	snprintf(buf,sizeof(buf),"%s input",name);
+	cnn_td_dump(layer.input, buf, 4);
+
+	snprintf(buf,sizeof(buf),"%s input unfold",name);
+	mat_dump(layer.input_unfolded,buf,4);
+
 	for(size_t i = 0;i<layer.knl.out_channel;++i){
-		snprintf(buf,sizeof(buf),"ws[%zu]",i);
+		snprintf(buf,sizeof(buf),"knl ws[%zu]",i);
 		mat_dump(layer.knl.ws[i],buf,4);
+
+		snprintf(buf,sizeof(buf),"gknl ws[%zu]",i);
+		mat_dump(layer.gknl.ws[i],buf,4);
 	}
+
+	snprintf(buf,sizeof(buf),"%s knl unfold",name);
+	mat_dump(layer.knl.m,buf,4);
 
 	snprintf(buf,sizeof(buf),"%s bias",name);
 	mat_dump(layer.bias,buf,4);
+
+	snprintf(buf,sizeof(buf),"%s gbias",name);
+	mat_dump(layer.gbias,buf,4);
+
+
+	snprintf(buf,sizeof(buf),"%s dot_result",name);
+	mat_dump(layer.dot_result,buf,4);
+
+	snprintf(buf,sizeof(buf),"%s gdot_result",name);
+	mat_dump(layer.gdot_result,buf,4);
+
+	snprintf(buf,sizeof(buf),"%s output",name);
+	cnn_td_dump(layer.output, buf, 4);
+
+	snprintf(buf,sizeof(buf),"%s ginput",name);
+	cnn_td_dump(layer.ginput, buf, 4);
 
 	NN_INFO("]\n");
 }
