@@ -2,10 +2,9 @@
 # File Name: build.sh
 # Author: mlxh
 # mail: mlxh_gto@163.com
-# Created Time: Mon 06 Apr 2026 08:03:53 PM CST
+# Created Time: Mon 20 Apr 2026 09:30:01 AM CST
 #########################################################################
-#!/bin/sh
+#!/bin/bash
 
-gcc -Wall -Wextra -o main main.c -lm
-gcc -Wall -Wextra -o train train.c -lm
+gcc -Wall -Wextra -o bm main.c
 
