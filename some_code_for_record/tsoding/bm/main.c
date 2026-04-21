@@ -29,6 +29,7 @@ typedef enum {
 	TRAP_STACK_UNDERFLOW,
 	TRAP_ILLEGAL_INST,
 	TRAP_ILLEGAL_INST_ACCESS,
+	TRAP_ILLEGAL_OPERAND,
 	TRAP_DIV_BY_ZERO,
 } Trap;
 
@@ -40,6 +41,7 @@ const char *trap_as_cstr(const Trap trap)
 		case TRAP_STACK_UNDERFLOW: return "TRAP_STACK_UNDERFLOW";
 		case TRAP_ILLEGAL_INST: return "TRAP_ILLEGAL_INST";
 		case TRAP_ILLEGAL_INST_ACCESS: return "TRAP_ILLEGAL_INST_ACCESS";
+		case TRAP_ILLEGAL_OPERAND: return "TRAP_ILLEGAL_OPERAND";
 		case TRAP_DIV_BY_ZERO: return "TRAP_DIV_BY_ZERO";
 		default: BM_ASSERT(0 && "trap_as_cstr : Unreachable");
 	}
@@ -51,8 +53,12 @@ typedef enum {
 	INST_MINUS,
 	INST_MULT,
 	INST_DIV,
+	INST_DUP,
 	INST_JMP,
-	INST_HALT, //interrupt or stop ?
+	INST_JMP_IF,
+	INST_EQ,
+	INST_HALT,
+	INST_PRINT_DEBUG,
 } Inst_Type;
 
 const char *inst_type_as_cstr(Inst_Type type)
@@ -63,8 +69,12 @@ const char *inst_type_as_cstr(Inst_Type type)
 		case INST_MINUS:return "INST_MINUS";
 		case INST_MULT: return "INST_MULT";
 		case INST_DIV:  return "INST_DIV";
+		case INST_DUP:  return "INST_DUP";
 		case INST_JMP: return "INST_JMP";
+		case INST_JMP_IF: return "INST_JMP_IF";
+		case INST_EQ:  return "INST_EQ";
 		case INST_HALT:  return "INST_HALT";
+		case INST_PRINT_DEBUG:  return "INST_PRINT_DEBUG";
 		default: BM_ASSERT(0 && "inst_type_as_cstr : Unreachable");
 	}
 
@@ -86,13 +96,17 @@ typedef struct {
 	Word halt;
 } Bm;
 
-#define MAKE_INST_PUSH(value) (Inst){.type = INST_PUSH, .operand = (value)}
-#define MAKE_INST_PLUS		  (Inst){.type = INST_PLUS}
-#define MAKE_INST_MINUS		  (Inst){.type = INST_MINUS}
-#define MAKE_INST_MULT		  (Inst){.type = INST_MULT}
-#define MAKE_INST_DIV		  (Inst){.type = INST_DIV}
-#define MAKE_INST_JMP(addr)	  (Inst){.type = INST_JMP, .operand = (addr)}
-#define MAKE_INST_HALT		  (Inst){.type = INST_HALT}
+#define MAKE_INST_PUSH(value)		(Inst){.type = INST_PUSH, .operand = (value)}
+#define MAKE_INST_PLUS				(Inst){.type = INST_PLUS}
+#define MAKE_INST_MINUS				(Inst){.type = INST_MINUS}
+#define MAKE_INST_MULT				(Inst){.type = INST_MULT}
+#define MAKE_INST_DIV				(Inst){.type = INST_DIV}
+#define MAKE_INST_DUP(addr)			(Inst){.type = INST_DUP, .operand = (addr)}
+#define MAKE_INST_JMP(addr)			(Inst){.type = INST_JMP, .operand = (addr)}
+#define MAKE_INST_JMP_IF(addr)		(Inst){.type = INST_JMP_IF, .operand = (addr)}
+#define MAKE_INST_EQ				(Inst){.type = INST_EQ}
+#define MAKE_INST_HALT				(Inst){.type = INST_HALT}
+#define MAKE_INST_PRINT_DEBUG		(Inst){.type = INST_PRINT_DEBUG}
 
 Trap bm_execute_inst(Bm *bm)
 {
@@ -103,32 +117,25 @@ Trap bm_execute_inst(Bm *bm)
 
 	switch(inst.type){
 		case INST_PUSH:
-			if(bm->stack_size >= BM_STACK_CAPACITY){
-				return TRAP_STACK_OVERFLOW;
-			}
-			bm->stack[bm->stack_size++] = inst.operand;
+			if(bm->stack_size >= BM_STACK_CAPACITY) return TRAP_STACK_OVERFLOW;
+			bm->stack[bm->stack_size] = inst.operand;
+			bm->stack_size += 1;
 			bm->ip += 1;
 			break;
 		case INST_PLUS:
-			if(bm->stack_size < 2){
-				return TRAP_STACK_UNDERFLOW;
-			}
+			if(bm->stack_size < 2) return TRAP_STACK_UNDERFLOW;
 			bm->stack[bm->stack_size - 2] += bm->stack[bm->stack_size - 1];
 			bm->stack_size -= 1;
 			bm->ip += 1;
 			break;
 		case INST_MINUS:
-			if(bm->stack_size < 2){
-				return TRAP_STACK_UNDERFLOW;
-			}
+			if(bm->stack_size < 2) return TRAP_STACK_UNDERFLOW;
 			bm->stack[bm->stack_size - 2] -= bm->stack[bm->stack_size - 1];
 			bm->stack_size -= 1;
 			bm->ip += 1;
 			break;
 		case INST_MULT:
-			if(bm->stack_size < 2){
-				return TRAP_STACK_UNDERFLOW;
-			}
+			if(bm->stack_size < 2) return TRAP_STACK_UNDERFLOW;
 			bm->stack[bm->stack_size - 2] *= bm->stack[bm->stack_size - 1];
 			bm->stack_size -= 1;
 			bm->ip += 1;
@@ -141,11 +148,42 @@ Trap bm_execute_inst(Bm *bm)
 			bm->stack_size -= 1;
 			bm->ip += 1;
 			break;
+		case INST_DUP:
+			if(bm->stack_size < 1) return TRAP_STACK_UNDERFLOW;
+			if(bm->stack_size >= BM_STACK_CAPACITY) return TRAP_STACK_OVERFLOW;
+			if(bm->stack_size - inst.operand <= 0) return TRAP_STACK_UNDERFLOW;
+			if(inst.operand < 0) return TRAP_ILLEGAL_OPERAND;
+
+			bm->stack[bm->stack_size] = bm->stack[bm->stack_size - 1 - inst.operand];
+			bm->stack_size += 1;
+			bm->ip += 1;
+			break;
 		case INST_JMP:
-			bm->ip = inst.operand; //????
+			bm->ip = inst.operand;
+			break;
+		case INST_JMP_IF:
+			if(bm->stack_size < 1) return TRAP_STACK_UNDERFLOW;
+			if(bm->stack[bm->stack_size - 1]){
+				bm->stack_size -= 1;
+				bm->ip = inst.operand;
+			}else{
+				bm->ip += 1;
+			}
+			break;
+		case INST_EQ:
+			if(bm->stack_size < 2) return TRAP_STACK_UNDERFLOW;
+
+			bm->stack[bm->stack_size - 2] = bm->stack[bm->stack_size - 1] == bm->stack[bm->stack_size - 2];
+			bm->stack_size -= 1;
+			bm->ip += 1;
 			break;
 		case INST_HALT:
 			bm->halt = 1;
+			break;
+		case INST_PRINT_DEBUG:
+			if(bm->stack_size < 1) return TRAP_STACK_UNDERFLOW;
+			HELLOWORLD("stack top [%ld] \n",bm->stack[bm->stack_size - 1]);
+			bm->ip += 1;
 			break;
 		default:
 			return TRAP_ILLEGAL_INST;
@@ -179,7 +217,12 @@ Inst program[] = {
 	MAKE_INST_PUSH(0),		//0
 	MAKE_INST_PUSH(1),		//1
 	MAKE_INST_PLUS,			//2
+	//MAKE_INST_PUSH(23),		//3
+	//MAKE_INST_DUP(0),			//3
+	//MAKE_INST_EQ,			//4
+	//MAKE_INST_JMP_IF(1),	//5
 	MAKE_INST_JMP(1),
+	MAKE_INST_HALT,			//6
 };
 
 
