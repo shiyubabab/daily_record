@@ -16,14 +16,78 @@
 #define SV_IMPLEMENTATION
 #include "sv.h"
 
+#define LL_IMPLEMENTATION
+#include "ll.h"
+
 #define handle_error(msg) \
 	do { perror(msg); exit(EXIT_FAILURE); } while(0)
 
 char *path = "../shakespeare.txt";
 
+
 typedef struct {
 	char data[32];
 } Word;
+
+/************
+ *  llcache
+ ***********/
+
+#ifndef LL_IMPLEMENTATION
+bool cache_get(Word word, size_t *freq){
+	(void) word;
+	(void) freq;
+	return false;
+}
+
+void cache_put(Word word, size_t freq){
+	(void) word;
+	(void) freq;
+}
+#else
+#define CACHE_CAP 1024
+
+typedef struct {
+	ptrdiff_t prev;
+	ptrdiff_t next;
+	Word key;
+	size_t value;
+} Node;
+
+Node *queue = NULL;
+bool cache_get(Word key, size_t *value)
+{
+	llforeach(i,queue){
+		if(strcmp(queue[i].key.data,key.data) == 0){
+			if(value) *value = queue[i].value;
+			llmovefront(queue,i);
+			return true;
+		}
+	}
+	return false;
+}
+
+void cache_put(Word key, size_t value)
+{
+	if(llcount(queue) < CACHE_CAP){
+		llpushfront(queue);
+	} else {
+		llmovefront(queue,llback(queue));
+	}
+
+	queue[llfront(queue)].key = key;
+	queue[llfront(queue)].value = value;
+}
+
+void cache_cleanup(void)
+{
+	llfree(queue);
+}
+
+#endif
+
+
+// end of llcache
 
 Word sv_as_word(String_View sv)
 {
@@ -93,7 +157,10 @@ int main(void)
 				Word needle = word_norm(sv_as_word(sv_word));
 				//printf("(%s)\n",word.data);
 				size_t frep = 0;
-				frep = word_count(sv_from_part(content_data,content_size),needle);
+				if(!cache_get(needle,&frep)){
+					frep = word_count(sv_from_part(content_data,content_size),needle);
+					cache_put(needle,frep);
+				}
 				printf("%s(%zu) ",needle.data,frep);
 			}
 		}
