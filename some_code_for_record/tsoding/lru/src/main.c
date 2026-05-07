@@ -52,7 +52,7 @@ typedef struct {
 	ptrdiff_t next;
 	Word key;
 	size_t value;
-} Node;
+} LL_ALIGN Node;
 
 Node *queue = NULL;
 bool cache_get(Word key, size_t *value)

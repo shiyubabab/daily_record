@@ -34,13 +34,25 @@
 
 #include <stddef.h>
 #include <string.h>
+#include <stdint.h>
 
-typedef struct{
+#if UINTPTR_MAX == 0xffffffffffffffff
+	#define PLATFORM_CACHE_LINE 64
+#else
+	#define PLATFORM_CACHE_LINE 32
+#endif
+
+#define LL_ALIGN __attribute__((aligned(PLATFORM_CACHE_LINE)))
+
+typedef struct {
 	size_t count;
 	size_t capacity;
 	ptrdiff_t front;
 	ptrdiff_t back;
-} ll__header;
+} LL_ALIGN ll__header;
+
+#define LL_GET_HEADER(data_ptr) ((ll__header *)(data_ptr) - 1)
+#define LL_GET_DATA(header_ptr) ((char *)((ll__header *)(header_ptr) + 1))
 
 ll__header *ll__grow(ll__header *header, size_t node_size);
 void *ll__pushfront(void *ptr, size_t node_size, size_t prev_offset, size_t next_offset);
@@ -142,13 +154,13 @@ void *ll__pushfront(void *ptr, size_t node_size, size_t prev_offset, size_t next
 	if(ptr == NULL){
 		header = ll__grow(NULL,node_size);
 	} else {
-		header = (ll__header *)ptr - 1;
+		header = LL_GET_HEADER(ptr);
 		if(header->count >= header->capacity){
 			header = ll__grow(header,node_size);
 		}
 	}
 
-	char *nodes = (char *)(header + 1);
+	char *nodes = LL_GET_DATA(header);
 	#define DEREF(index, offset) *(ptrdiff_t *) (nodes + index * node_size + offset)
 
 	ptrdiff_t node_index = header->count++;
@@ -175,13 +187,13 @@ void *ll__pushback(void *ptr, size_t node_size, size_t prev_offset, size_t next_
 	if(ptr == NULL){
 		header = ll__grow(NULL,node_size);
 	} else {
-		header = (ll__header *)ptr - 1;
+		header = LL_GET_HEADER(ptr);
 		if(header->count >= header->capacity){
 			header = ll__grow(header,node_size);
 		}
 	}
 
-	char *nodes = (char *)(header + 1);
+	char *nodes = LL_GET_DATA(header);
 	#define DEREF(index, offset) *(ptrdiff_t *) (nodes + index * node_size + offset)
 
 	ptrdiff_t node_index = header->count++;
@@ -203,28 +215,28 @@ void *ll__pushback(void *ptr, size_t node_size, size_t prev_offset, size_t next_
 
 size_t llcount(void *ll)
 {
-	return ll ? ((ll__header *)ll - 1)->count : 0;
+	return ll ? (LL_GET_HEADER(ll))->count : 0;
 }
 
 ptrdiff_t  llback(void *ll)
 {
-	return ll ? ((ll__header *)ll - 1)->back : -1;
+	return ll ? (LL_GET_HEADER(ll))->back : -1;
 }
 
 ptrdiff_t llfront(void *ll)
 {
-	return ll ? ((ll__header *)ll - 1)->front : -1;
+	return ll ? (LL_GET_HEADER(ll))->front : -1;
 }
 
 void llfree(void *ll)
 {
-	if(ll) LL_FREE((ll__header *)ll - 1);
+	if(ll) LL_FREE(LL_GET_HEADER(ll));
 }
 
 void ll__movefront(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t index)
 {
 	LL_ASSERT(ll != NULL && index >= 0);
-	ll__header *header = (ll__header *)ll - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	LL_ASSERT(index < (ptrdiff_t)header->count);
 					
 	if(header->front == index) return;
@@ -254,7 +266,7 @@ void ll__movefront(void *ll, size_t node_size, size_t prev_offset, size_t next_o
 void ll__moveback(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t index)
 {
 	LL_ASSERT(ll != NULL && index >= 0);
-	ll__header *header = (ll__header *)ll - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	LL_ASSERT(index < (ptrdiff_t)header->count);
 					
 	if(header->back == index) return;
@@ -286,7 +298,7 @@ void ll__moveback(void *ll, size_t node_size, size_t prev_offset, size_t next_of
 void ll__delete(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t index)
 {
 	LL_ASSERT(ll != NULL);
-	ll__header *header = (ll__header *)ll - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	char * nodes = (char *)ll;
 
 	LL_ASSERT(index >= 0 && index < (ptrdiff_t)header->count);
@@ -327,7 +339,7 @@ void ll__exchange(void *ll, size_t node_size, size_t prev_offset, size_t next_of
 	LL_ASSERT(ll != NULL && idx_a >= 0 && idx_b >= 0);
 	if (idx_a == idx_b) return;
 
-	ll__header *header = (ll__header *)ll - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	char *nodes = (char *)ll;
 	#define DEREF(idx, off) *(ptrdiff_t *)(nodes + node_size * (idx) + (off))
 
@@ -368,14 +380,14 @@ void ll__exchange(void *ll, size_t node_size, size_t prev_offset, size_t next_of
 	#undef DEREF
 }
 
-void *ll__insert_after(void *ptr, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t target_idx)
+void *ll__insert_after(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t target_idx)
 {
-	ll__header *header = (ll__header *)ptr - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	if(header->count >= header->capacity){
 		header = ll__grow(header, node_size);
 	}
 
-	char *nodes = (char *)(header + 1);
+	char *nodes = (char *)ll;
 	#define DEREF(idx, off) *(ptrdiff_t *)(nodes + node_size * (idx) + (off))
 
 	ptrdiff_t new_idx = header->count++;
@@ -394,14 +406,14 @@ void *ll__insert_after(void *ptr, size_t node_size, size_t prev_offset, size_t n
 	return nodes;
 }
 
-void *ll__insert_before(void *ptr, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t target_idx)
+void *ll__insert_before(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, ptrdiff_t target_idx)
 {
-	ll__header *header = (ll__header *)ptr - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	if(header->count >= header->capacity){
 		header = ll__grow(header, node_size);
 	}
 
-	char *nodes = (char *)(header + 1);
+	char *nodes = (char *)ll;
 	#define DEREF(idx, off) *(ptrdiff_t *)(nodes + node_size * (idx) + (off))
 
 	ptrdiff_t new_idx = header->count++;
@@ -424,7 +436,7 @@ void *ll__insert_before(void *ptr, size_t node_size, size_t prev_offset, size_t 
 void ll__clear(void *ll)
 {
 	if(ll) {
-		ll__header *header = (ll__header *)ll - 1;
+		ll__header *header = LL_GET_HEADER(ll);
 		header->count = 0;
 		header->front = -1;
 		header->back = -1;
@@ -435,7 +447,7 @@ ptrdiff_t ll__find(void *ll, size_t node_size, size_t next_offset, int (*cmp_fun
 {
 	if(!ll) return -1;
 	char *nodes = (char *)ll;
-	ptrdiff_t curr = ((ll__header *)ll - 1)->front;
+	ptrdiff_t curr = (LL_GET_HEADER(ll))->front;
 
 	while(curr >= 0) {
 		if(cmp_func(nodes + curr * node_size, user_data) == 0) {
@@ -450,7 +462,7 @@ ptrdiff_t ll__find(void *ll, size_t node_size, size_t next_offset, int (*cmp_fun
 void ll__dump(void *ll, size_t node_size, size_t prev_offset, size_t next_offset, char *name)
 {
 	LL_ASSERT(ll != NULL);
-	ll__header * header = (ll__header *)ll - 1;
+	ll__header *header = LL_GET_HEADER(ll);
 	char * nodes = (char *)ll;
 
 	#define DEREF(index, offset) *(ptrdiff_t *)(nodes + node_size * index + offset)
